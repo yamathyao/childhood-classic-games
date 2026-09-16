@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+pnpm-lock.yaml
+yarn.lock
+
+# Build output
+dist/
+build/
+out/
+.cache/
+
+# WeChat Mini Program tooling and local build artifacts
+miniprogram_npm/
+project.private.config.json
+*.wxss.map
+*.wxml.map
+*.js.map
+
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
