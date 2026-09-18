@@ -1,0 +1,12 @@
+{
+  "name": "childhood-classic-games",
+  "version": "0.1.0",
+  "private": true,
+  "description": "原生微信小游戏合集",
+  "scripts": {
+    "test": "node --test tests/game-interaction.test.js tests/rules.test.js",
+    "check": "node tools/check-project.cjs",
+    "visual:qa": "node tools/visual-qa.cjs"
+  },
+  "engines": { "node": ">=20" }
+}
