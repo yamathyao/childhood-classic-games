@@ -1,13 +1,19 @@
 # Dependencies
 node_modules/
-pnpm-lock.yaml
-yarn.lock
 
 # Build output
 dist/
 build/
 out/
 .cache/
+garden-gpt-image-2/
+coverage/
+.nyc_output/
+
+# Generated visual previews and local review exports
+tmp/
+art-source/*.png
+art-source/lettering/*.ttf
 
 # WeChat Mini Program tooling and local build artifacts
 miniprogram_npm/
@@ -19,11 +25,15 @@ project.private.config.json
 # Environment and local configuration
 .env
 .env.*
+.gateway.env
 !.env.example
 
 # Editors and operating systems
 .vscode/
 .idea/
+.history/
+.codex/
+.agents/
 *.swp
 *.swo
 .DS_Store
@@ -31,5 +41,13 @@ Thumbs.db
 
 # Logs and temporary files
 *.log
-tmp/
 temp/
+*.tmp
+*.temp
+*.bak
+*.orig
+*.rej
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
