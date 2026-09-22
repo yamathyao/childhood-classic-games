@@ -14,6 +14,7 @@ function layout(screen) {
   return {
     ...screen, board, cell,
     back: { x: 20, y: top, w: 88, h: 36 },
+    picker: { x: width - 126, y: top, w: 48, h: 36 },
     help: { x: width - 68, y: top, w: 48, h: 36 },
     undo: { x: controlsX, y: controlsY, w: buttonW, h: 44 },
     reset: { x: controlsX + buttonW + 12, y: controlsY, w: buttonW, h: 44 },

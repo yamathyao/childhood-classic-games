@@ -86,6 +86,20 @@ test('sokoban card opens a readable full-screen detail page before the board', (
   assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
 })
 
+test('sokoban direction pad uses larger touch targets within the safe area', () => {
+  const screen = { width: 375, height: 812, top: 24, bottom: 16 }
+  const view = layout(screen, create(defaultLevel).board)
+  assert.ok(view.pad.up.w >= 54)
+  assert.ok(view.pad.down.y + view.pad.down.h <= screen.height - screen.bottom)
+  assert.ok(view.pad.up.y - (view.undo.y + view.undo.h) <= 14)
+})
+
+test('sokoban page omits the timer from the crowded play area', () => {
+  const game = boot()
+  game.clickText('进入游戏')
+  assert.equal(game.texts.some(item => item.text.includes('计时')), false)
+})
+
 test('tetris card opens its detail page and routes into an independent scene', () => {
   const game = boot()
   const card = game.texts.find(item => item.text.includes('俄罗斯方块'))

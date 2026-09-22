@@ -18,6 +18,8 @@ test('keeps board and controls inside the safe area on compact and tall phones',
       assert.ok(rect.x + rect.w <= screen.width && rect.y + rect.h <= screen.height - screen.bottom,
         `${screen.width}x${screen.height} bounds`)
     }
+    assert.ok(view.board.y > view.preview.y + view.preview.h,
+      `${screen.width}x${screen.height} board clears the header preview`)
   }
 })
 

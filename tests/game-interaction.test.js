@@ -259,6 +259,17 @@ test('level picker switches layouts and keeps saves isolated by level id', () =>
   assert.equal(game.storage.get('klotski.currentLevel'), 'classic')
 })
 
+test('in-game level button opens and closes the Klotski picker', () => {
+  const game = boot()
+  assert.equal(game.hasText('选关'), true)
+  game.clickText('选关')
+  assert.equal(game.hasText('选择布局'), true)
+  assert.equal(game.hasText('横刀立马'), true)
+  game.clickText('×')
+  assert.equal(game.hasText('选择布局'), false)
+  assert.equal(game.hasText('选关'), true)
+})
+
 test('game keeps the top-left collection link and also provides a dedicated exit button', () => {
   const game = boot()
   assert.equal(game.hasText('游戏合集'), true)

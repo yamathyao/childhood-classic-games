@@ -92,4 +92,20 @@ function selectionButton(c, rect, label = '选择对局') {
   c.restore()
 }
 
-module.exports = { palette, path, box, text, gradient, background, contains, button, selectionButton }
+function headerButton(c, rect, label, options = {}) {
+  const fill = options.fill || 'rgba(255,251,240,.78)'
+  const stroke = options.stroke || 'rgba(152,119,67,.72)'
+  const color = options.color || palette.ink
+  c.save()
+  c.shadowColor = options.shadow || 'rgba(68,45,22,.14)'
+  c.shadowBlur = 5
+  c.shadowOffsetY = 2
+  box(c, rect, fill, 8, stroke)
+  c.shadowColor = 'transparent'
+  box(c, { x: rect.x + 1.5, y: rect.y + 1.5, w: rect.w - 3, h: rect.h - 3 }, null, 6,
+    options.inner || 'rgba(255,255,255,.55)')
+  text(c, label, rect.x + rect.w / 2, rect.y + rect.h / 2, options.size || 11, color, 'center', true)
+  c.restore()
+}
+
+module.exports = { palette, path, box, text, gradient, background, contains, button, selectionButton, headerButton }

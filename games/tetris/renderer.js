@@ -1,4 +1,4 @@
-const { box, text, gradient, path } = require('../../common/canvas.js')
+const { box, text, gradient, path, headerButton } = require('../../common/canvas.js')
 const { WIDTH, HEIGHT, cellsFor, SHAPES } = require('./rules.js')
 
 const PALETTE = {
@@ -11,11 +11,6 @@ const PALETTE = {
 }
 
 function formatScore(value) { return String(Math.max(0, Math.floor(value || 0))).padStart(6, '0') }
-
-function formatDuration(elapsedMs) {
-  const seconds = Math.max(0, Math.floor((elapsedMs || 0) / 1000))
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
 
 function tileRect(layout, x, y, inset = 0) {
   return { x: layout.board.x + x * layout.cell + inset, y: layout.board.y + y * layout.cell + inset,
@@ -31,11 +26,12 @@ function drawBackdrop(c, layout) {
   c.fillStyle = 'rgba(222,198,125,.35)'; c.fillRect(0, layout.top + 95, layout.width, 1)
 }
 
-function drawHeader(c, layout, state, elapsedMs) {
-  text(c, '‹  游戏合集', layout.back.x + 3, layout.back.y + layout.back.h / 2, 12, PALETTE.brassLight)
-  text(c, '重开', layout.reset.x + layout.reset.w / 2, layout.reset.y + layout.reset.h / 2, 11, PALETTE.muted, 'center')
-  text(c, '暂停', layout.pause.x + layout.pause.w / 2, layout.pause.y + layout.pause.h / 2, 11, PALETTE.muted, 'center')
-  text(c, '玩法', layout.help.x + layout.help.w / 2, layout.help.y + layout.help.h / 2, 11, PALETTE.muted, 'center')
+function drawHeader(c, layout, state) {
+  const header = { fill: 'rgba(25,44,75,.92)', stroke: PALETTE.brass, color: PALETTE.ink, inner: 'rgba(255,232,164,.3)', shadow: 'rgba(0,0,0,.3)' }
+  headerButton(c, layout.back, '‹  游戏合集', { ...header, size: 10 })
+  headerButton(c, layout.reset, '重开', header)
+  headerButton(c, layout.pause, '暂停', header)
+  headerButton(c, layout.help, '玩法', header)
   text(c, '俄罗斯方块', 18, layout.top + 50, layout.compact ? 23 : 27, PALETTE.ink, 'left', true)
   text(c, '经典无尽 · 消行越多，速度越快', 20, layout.top + 76, 10, PALETTE.muted)
   drawStat(c, layout.stats.score, '分数', formatScore(state.score))
@@ -44,7 +40,6 @@ function drawHeader(c, layout, state, elapsedMs) {
   box(c, layout.preview, 'rgba(31,50,85,.9)', 10, PALETTE.brass)
   text(c, '下一个', layout.preview.x + layout.preview.w / 2, layout.preview.y + 9, 8, PALETTE.muted, 'center')
   drawMiniPiece(c, layout.preview, state.queue[0])
-  text(c, `计时  ${formatDuration(elapsedMs)}`, layout.width / 2, layout.board.y - 8, 10, PALETTE.muted, 'center')
 }
 
 function drawStat(c, rect, label, value) {
@@ -171,7 +166,7 @@ function drawModal(c, layout, modal, state) {
   } else if (modal === 'rules') {
     text(c, '玩法说明', d.x + d.w / 2, d.y + 36, 22, PALETTE.brassLight, 'center', true)
     const lines = ['左右滑动移动方块，点击棋盘旋转。', '下滑软降，上滑或按硬降直接落底。', '填满整行即可消除，等级越高速度越快。']
-    lines.forEach((line, index) => text(c, line, d.x + 18, d.y + 78 + index * 24, 12, PALETTE.ink))
+    lines.forEach((line, index) => text(c, line, d.x + d.w / 2, d.y + 78 + index * 24, 12, PALETTE.ink, 'center'))
     button(c, buttons.cancel, '返回游戏', true)
   } else {
     text(c, '重新开始？', d.x + d.w / 2, d.y + 42, 23, PALETTE.brassLight, 'center', true)
@@ -181,9 +176,9 @@ function drawModal(c, layout, modal, state) {
   }
 }
 
-function draw({ c, layout, state, elapsedMs, modal }) {
+function draw({ c, layout, state, modal }) {
   drawBackdrop(c, layout)
-  drawHeader(c, layout, state, elapsedMs)
+  drawHeader(c, layout, state)
   drawPlayfield(c, layout, state)
   drawControls(c, layout)
   if (modal) drawModal(c, layout, modal, state)
@@ -201,4 +196,4 @@ function drawCover(c, rect, options = {}) {
   blocks.forEach(([type, x, y]) => drawBlock(c, { x: board.x + x * cell + 1, y: board.y + y * cell + 1, w: cell - 2, h: cell - 2 }, type))
 }
 
-module.exports = { PALETTE, draw, drawBlock, drawMiniPiece, drawCover, modalButtons, formatDuration, formatScore }
+module.exports = { PALETTE, draw, drawBlock, drawMiniPiece, drawCover, modalButtons, formatScore }
