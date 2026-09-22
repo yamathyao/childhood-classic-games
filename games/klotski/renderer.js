@@ -162,8 +162,8 @@ function drawBoard(c, board, cell, pieces, selected, drag, portraits, omittedPie
   c.restore()
 }
 
-function drawDialog(c, layout, type, steps, best, levelName) {
-  const { width, height, dialog, cancel, confirm } = layout
+function drawDialog(c, layout, type, steps, best, levelName, hasNextLevel) {
+  const { width, height, dialog, cancel, confirm, next } = layout
   c.fillStyle = 'rgba(23,26,23,.58)'
   c.fillRect(0, 0, width, height)
   box(c, dialog, '#f4ecdc', 16, '#d9c298')
@@ -177,8 +177,20 @@ function drawDialog(c, layout, type, steps, best, levelName) {
       ? ['本局的步数与棋盘将重置。', '取消后可以继续当前进度。']
       : [`本次完成：${steps} 步`, best ? `个人最佳：${best} 步` : '每一步，都为最后的出路。']
   lines.forEach((line, i) => text(c, line, cx, dialog.y + 105 + i * 21, 12, P.muted, 'center'))
-  button(c, cancel, type === 'won' ? '查看棋盘' : type === 'rules' ? '返回' : '取消')
-  button(c, confirm, type === 'won' ? '再来一局' : type === 'rules' ? '开始解局' : '确认重开', true)
+  if (type === 'won') {
+    const gap = 6; const buttonW = (dialog.w - 24 - gap * 2) / 3; const buttonX = dialog.x + 12; const buttonY = dialog.y + 190
+    layout.cancel = { x: buttonX, y: buttonY, w: buttonW, h: 42 }
+    layout.confirm = { x: buttonX + buttonW + gap, y: buttonY, w: buttonW, h: 42 }
+    layout.next = { x: buttonX + (buttonW + gap) * 2, y: buttonY, w: buttonW, h: 42 }
+    layout.nextEnabled = Boolean(hasNextLevel)
+    button(c, cancel, '查看棋盘')
+    button(c, confirm, '再来一局', true)
+    button(c, next, '下一关', false, layout.nextEnabled)
+  } else {
+    layout.nextEnabled = false
+    button(c, cancel, type === 'rules' ? '返回' : '取消')
+    button(c, confirm, type === 'rules' ? '开始解局' : '确认重开', true)
+  }
 }
 
 function drawLevelPicker(c, layout, levels, currentId) {
@@ -226,7 +238,7 @@ function formatDuration(elapsedMs) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, best, storageWarning, omittedPiece, level }) {
+function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, best, storageWarning, omittedPiece, level, hasNextLevel }) {
   const { width, height, top, board, cell } = layout
   background(c, width, height)
   text(c, '‹  游戏合集', 24, top + 18, 13, P.muted)
@@ -245,7 +257,7 @@ function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, b
   button(c, layout.exit, '退出棋局', false)
   text(c, storageWarning ? '本机保存不可用，请勿关闭游戏' : '进度自动保存在本机', width / 2,
     layout.exit.y + layout.exit.h + 16, 10, storageWarning ? P.wine : P.muted, 'center')
-  if (modal) drawDialog(c, layout, modal, state.steps, best, level && level.name)
+  if (modal) drawDialog(c, layout, modal, state.steps, best, level && level.name, hasNextLevel)
 }
 
 // Cache the stationary scene while dragging. Only the moving tile is redrawn per frame.
@@ -262,14 +274,22 @@ function createRenderer() {
     const width = Math.ceil(layout.width * dpr)
     const height = Math.ceil(layout.height * dpr)
     if (typeof wx.createOffscreenCanvas === 'function') {
-      try {
-        const candidate = wx.createOffscreenCanvas({ type: '2d', width, height })
-        const candidateContext = candidate && candidate.getContext && candidate.getContext('2d')
-        if (candidateContext && candidateContext !== mainContext) {
-          candidateContext.scale(dpr, dpr)
-          return { surface: candidate, context: candidateContext }
-        }
-      } catch (error) {}
+      const factories = [
+        () => wx.createOffscreenCanvas({ type: '2d', width, height }),
+        () => wx.createOffscreenCanvas()
+      ]
+      for (const factory of factories) {
+        try {
+          const candidate = factory()
+          if (!candidate || candidate === mainContext || !candidate.getContext) continue
+          try { candidate.width = width; candidate.height = height } catch (error) {}
+          const candidateContext = candidate.getContext('2d') || candidate.getContext()
+          if (candidateContext && candidateContext !== mainContext) {
+            candidateContext.scale(dpr, dpr)
+            return { surface: candidate, context: candidateContext }
+          }
+        } catch (error) {}
+      }
     }
     // Older game runtimes can expose only createCanvas. Use it as an offscreen
     // surface when it returns a distinct canvas; never paint the main canvas

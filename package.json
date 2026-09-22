@@ -4,8 +4,9 @@
   "private": true,
   "description": "原生微信小游戏合集",
   "scripts": {
-    "test": "node --test tests/game-interaction.test.js tests/rules.test.js",
+    "test": "node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js",
     "check": "node tools/check-project.cjs",
+    "sokoban:verify": "node tools/verify-sokoban.cjs",
     "visual:qa": "node tools/visual-qa.cjs"
   },
   "engines": { "node": ">=20" }

@@ -1,27 +1,20 @@
 const rulesApi = require('./rules.js')
-const { getLevel, defaultLevel } = require('./levels.js')
+const { levels, getLevel, defaultLevel } = require('./levels.js')
 const { layout: makeLayout } = require('./layout.js')
 const { createRenderer } = require('./renderer.js')
 const { contains } = require('../../common/canvas.js')
 const { loadPortraits } = require('./art.js')
-const SAVE_KEY = 'klotski.classic.v1'
-const BEST_KEY = 'klotski.classic.best.v1'
 
 function start({ context, screen, goHome, levelId = defaultLevel.id }) {
-  let level = getLevel(levelId)
-  let rules = rulesApi.create(level)
-  let saveKey = `klotski.${level.id}.v1`
-  let bestKey = `klotski.${level.id}.best.v1`
+  let level = null
+  let rules = null
+  let saveKey = ''
+  let bestKey = ''
   let layout = makeLayout(screen)
   let storageWarning = false
-  let state = rules.initialState()
+  let state = null
   let best = 0
-  try {
-    state = rules.restore(wx.getStorageSync(saveKey))
-    const savedBest = wx.getStorageSync(bestKey)
-    if (Number.isInteger(savedBest) && savedBest > 0) best = savedBest
-  } catch (error) { storageWarning = true }
-  let modal = rules.isWon(state.pieces) ? 'won' : null
+  let modal = null
   let gesture = null
   let drag = null
   let selected = null
@@ -29,10 +22,41 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
   let animation = null
   let frame = null
   let timerHandle = null
-  let timerStartedAt = state.steps > 0 && !rules.isWon(state.pieces) ? Date.now() : null
+  let timerStartedAt = null
   let dragFrame = null
+  const raf = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : typeof wx.requestAnimationFrame === 'function' ? wx.requestAnimationFrame.bind(wx) : null
+  const caf = typeof cancelAnimationFrame === 'function'
+    ? cancelAnimationFrame
+    : typeof wx.cancelAnimationFrame === 'function' ? wx.cancelAnimationFrame.bind(wx) : null
   const renderer = createRenderer()
   const portraits = loadPortraits(repaint)
+
+  function loadLevel(nextId) {
+    stopDragFrame()
+    stopAnimation()
+    gesture = null
+    selected = null
+    level = getLevel(nextId)
+    rules = rulesApi.create(level)
+    saveKey = `klotski.${level.id}.v1`
+    bestKey = `klotski.${level.id}.best.v1`
+    layout = makeLayout(screen)
+    state = rules.initialState()
+    best = 0
+    storageWarning = false
+    try {
+      state = rules.restore(wx.getStorageSync(saveKey))
+      const savedBest = wx.getStorageSync(bestKey)
+      if (Number.isInteger(savedBest) && savedBest > 0) best = savedBest
+      wx.setStorageSync('klotski.currentLevel', level.id)
+    } catch (error) { storageWarning = true }
+    modal = rules.isWon(state.pieces) ? 'won' : null
+    timerStartedAt = state.steps > 0 && !rules.isWon(state.pieces) ? Date.now() : null
+  }
+
+  loadLevel(levelId)
 
   function currentElapsedMs() {
     return state.elapsedMs + (timerStartedAt === null ? 0 : Date.now() - timerStartedAt)
@@ -58,7 +82,8 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
 
   function repaint() {
     if (active) renderer.draw({ c: context, layout, state, elapsedMs: currentElapsedMs(), selected, drag, modal,
-      portraits: portraits.portraits, best, storageWarning, level })
+      portraits: portraits.portraits, best, storageWarning, level,
+      hasNextLevel: levels.findIndex(item => item.id === level.id) < levels.length - 1 })
   }
 
   function persist() {
@@ -79,14 +104,14 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
   }
 
   function stopAnimation() {
-    if (frame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame)
+    if (frame !== null && caf) caf(frame)
     frame = null
     animation = null
     drag = null
   }
 
   function stopDragFrame() {
-    if (dragFrame !== null && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(dragFrame)
+    if (dragFrame !== null && caf) caf(dragFrame)
     dragFrame = null
   }
 
@@ -99,22 +124,22 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
       // the latest input while the released move still uses targetOffset.
       const current = drag && drag.id === gesture.id && drag.axis === gesture.axis ? drag.offset : 0
       const distance = gesture.targetOffset - current
-      gesture.offset = typeof requestAnimationFrame === 'function'
-        ? (Math.abs(distance) < .35 ? gesture.targetOffset : current + distance * .38)
+      gesture.offset = raf
+        ? (Math.abs(distance) < .35 ? gesture.targetOffset : current + distance * .55)
         : gesture.targetOffset
       drag = { id: gesture.id, axis: gesture.axis, offset: gesture.offset }
       repaint()
-      if (typeof requestAnimationFrame === 'function' && Math.abs(gesture.targetOffset - gesture.offset) >= .35) {
-        dragFrame = requestAnimationFrame(tick)
+      if (raf && Math.abs(gesture.targetOffset - gesture.offset) >= .35) {
+        dragFrame = raf(tick)
       }
     }
-    if (typeof requestAnimationFrame === 'function') dragFrame = requestAnimationFrame(tick)
+    if (raf) dragFrame = raf(tick)
     else tick()
   }
 
   function snapToGrid(id, axis, from, to, commit) {
     stopAnimation()
-    if (Math.abs(from - to) < .5 || typeof requestAnimationFrame !== 'function') {
+    if (Math.abs(from - to) < .5 || !raf) {
       commit()
       selected = null
       repaint()
@@ -127,7 +152,7 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
       const progress = Math.min(1, (Date.now() - began) / 100)
       drag = { id, axis, offset: from + (to - from) * (1 - Math.pow(1 - progress, 3)) }
       repaint()
-      if (progress < 1) frame = requestAnimationFrame(tick)
+      if (progress < 1) frame = raf(tick)
       else {
         const done = animation.commit
         stopAnimation()
@@ -136,7 +161,7 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
         repaint()
       }
     }
-    frame = requestAnimationFrame(tick)
+    frame = raf(tick)
   }
 
   function cancelGesture() {
@@ -156,6 +181,7 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
     if (modal) {
       if (contains(layout.cancel, touch)) return 'cancel'
       if (contains(layout.confirm, touch)) return 'confirm'
+      if (levels.findIndex(item => item.id === level.id) < levels.length - 1 && contains(layout.next, touch)) return 'next'
       return null
     }
     for (const name of ['back', 'help', 'undo', 'reset', 'exit']) {
@@ -182,6 +208,14 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
       }
       modal = null
       if (state.steps > 0 && !rules.isWon(state.pieces)) startTimer()
+    }
+    if (name === 'next') {
+      if (modal !== 'won') return
+      const index = levels.findIndex(item => item.id === level.id)
+      const nextLevel = levels[index + 1]
+      if (!nextLevel) return
+      stopTimer()
+      loadLevel(nextLevel.id)
     }
   }
 
@@ -244,8 +278,10 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
     gesture = null
     stopDragFrame()
     const delta = Math.sign(current.targetOffset) * Math.round(Math.abs(current.targetOffset) / layout.cell)
-    const visibleOffset = drag && drag.id === current.id && drag.axis === current.axis ? drag.offset : current.targetOffset
-    snapToGrid(current.id, current.axis, visibleOffset, delta * layout.cell, () => {
+    // The latest touch position is authoritative. A queued animation frame may
+    // still contain an older visual offset, which otherwise causes a visible
+    // jump backwards when the finger is released.
+    snapToGrid(current.id, current.axis, current.targetOffset, delta * layout.cell, () => {
       if (current.axis && delta && rules.move(state, current.id, current.axis, delta)) {
         if (state.steps === 1) startTimer()
         persist()
@@ -279,4 +315,4 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
     }
   }
 }
-module.exports = { start, SAVE_KEY, BEST_KEY }
+module.exports = { start }
