@@ -85,7 +85,13 @@ function boot(options = {}) {
     emit('Start', x, y); emit('Move', endX, endY); emit('End', endX, endY)
   }
   const clickText = label => {
-    const target = texts.find(t => t.text.includes(label))
+    let target = texts.find(t => t.text.includes(label))
+    if (!target && ['进入棋局', '继续解局', '选择对局'].includes(label)) {
+      const card = texts.find(t => t.text.includes('华容道'))
+      assert.ok(card, 'missing game card')
+      tap(card.x, card.y)
+      target = texts.find(t => t.text.includes(label) || (label === '进入棋局' && t.text.includes('继续解局')))
+    }
     assert.ok(target, 'missing visible control: ' + label)
     tap(target.x, target.y)
   }
@@ -219,6 +225,17 @@ test('real touch controller plays a complete solved game, locks win and restarts
   assert.equal(rules.isWon(game.getState().pieces), false)
   game.apply(solution[solution.length - 1])
   game.clickText('再来一局')
+  assert.equal(game.steps(), 0)
+})
+
+test('won dialog advances to the next Klotski layout', () => {
+  const game = boot()
+  solve().forEach(action => game.apply(action))
+  assert.equal(game.hasText('成功解围'), true)
+  assert.equal(game.hasText('下一关'), true)
+  game.clickText('下一关')
+  assert.equal(game.storage.get('klotski.currentLevel'), 'cross-generals')
+  assert.equal(game.hasText('横竖皆将'), true)
   assert.equal(game.steps(), 0)
 })
 

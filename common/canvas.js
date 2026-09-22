@@ -51,7 +51,7 @@ function background(c, width, height) {
 }
 
 function contains(rect, touch) {
-  return touch && touch.clientX >= rect.x && touch.clientX < rect.x + rect.w &&
+  return rect && touch && touch.clientX >= rect.x && touch.clientX < rect.x + rect.w &&
     touch.clientY >= rect.y && touch.clientY < rect.y + rect.h
 }
 

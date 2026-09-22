@@ -6,9 +6,15 @@ dist/
 build/
 out/
 .cache/
+.parcel-cache/
+.vite/
 garden-gpt-image-2/
 coverage/
 .nyc_output/
+
+# Local test and browser reports
+playwright-report/
+test-results/
 
 # Generated visual previews and local review exports
 tmp/
@@ -38,6 +44,7 @@ project.private.config.json
 *.swo
 .DS_Store
 Thumbs.db
+*.code-workspace
 
 # Logs and temporary files
 *.log
@@ -51,3 +58,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+*.pid

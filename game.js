@@ -1,6 +1,7 @@
 const { resize } = require('./common/screen.js')
 const home = require('./games/index/game.js')
 const klotski = require('./games/klotski/game.js')
+const sokoban = require('./games/sokoban/game.js')
 
 const canvas = wx.createCanvas()
 const context = canvas.getContext('2d')
@@ -25,6 +26,7 @@ function showScene(module, options = {}) {
 function goHome() {
   showScene(home, { openGame: (id, selectedLevel) => {
     if (id === 'klotski') showScene(klotski, { goHome, levelId: selectedLevel })
+    if (id === 'sokoban') showScene(sokoban, { goHome, levelId: selectedLevel })
   } })
 }
 
