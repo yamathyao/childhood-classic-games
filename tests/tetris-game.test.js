@@ -94,3 +94,13 @@ test('back action persists and returns to the collection', () => {
   assert.equal(game.intervals.size, 0)
   game.cleanup()
 })
+
+test('玩法弹窗的说明文字按弹窗中心对齐', () => {
+  const game = bootTetris()
+  game.tap(game.view.help)
+  const centerX = game.view.dialog.x + game.view.dialog.w / 2
+  const lines = game.texts.filter(item => item.text.includes('滑动') || item.text.includes('下滑软降') || item.text.includes('填满整行'))
+  assert.equal(lines.length, 3)
+  assert.ok(lines.every(item => item.x === centerX))
+  game.cleanup()
+})

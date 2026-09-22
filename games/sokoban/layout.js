@@ -5,7 +5,9 @@ function layout(screen, board) {
   const boardY = top + 132
   const buttonGap = 8
   const buttonW = Math.min(104, (width - 44 - buttonGap * 2) / 3)
-  const padSize = Math.min(height < 660 ? 42 : 46, (width - 54) / 3)
+  // Give the directional pad a comfortable touch target while reserving the
+  // reduced board height above it on compact screens.
+  const padSize = Math.min(height < 660 ? 48 : 54, (width - 54) / 3)
   const padX = (width - padSize * 3 - 8) / 2
   const padY = height - bottom - padSize * 2 - 12
   const playTop = boardY + (height < 660 ? 4 : 18)
@@ -14,7 +16,9 @@ function layout(screen, board) {
   const boardHeight = cell * rows
   const boardRect = { x: (width - cell * cols) / 2, y: playTop + Math.max(0, (maxBoardHeight - boardHeight) / 2),
     w: cell * cols, h: boardHeight }
-  const controlsY = boardRect.y + boardRect.h + 50
+  // Keep the action row close to the directional pad instead of leaving a
+  // large empty band below the board on taller screens.
+  const controlsY = padY - 42 - 14
   const controlsX = (width - buttonW * 3 - buttonGap * 2) / 2
   return {
     ...screen, board: boardRect, cell,

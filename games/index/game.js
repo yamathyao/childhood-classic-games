@@ -171,13 +171,13 @@ function start({ context: c, screen: initialScreen, openGame }) {
   function drawDetail() {
     const { width, height, top, bottom } = screen
     detailBack = { x: 18, y: top + 5, w: 105, h: 32 }
-    text(c, '‹  游戏合集', detailBack.x + 4, detailBack.y + 16, 13, detailGame === 'sokoban' ? '#566044' : detailGame === 'tetris' ? '#9fb1ce' : P.muted)
+    text(c, '‹  游戏合集', detailBack.x + 4, detailBack.y + 16, 13, detailGame === 'sokoban' ? '#566044' : P.muted)
     const isSokoban = detailGame === 'sokoban'
     const isTetris = detailGame === 'tetris'
     const title = isSokoban ? '推箱子' : isTetris ? '俄罗斯方块' : '华容道'
     const subtitle = isSokoban ? '经典仓库番 · 木箱与目标点' : isTetris ? '经典街机 · 七种方块与无限消行' : '一帅 · 五将 · 四兵'
-    text(c, title, 24, top + 70, 31, isSokoban ? '#26333a' : isTetris ? '#eaf1ff' : P.ink, 'left', true)
-    text(c, subtitle, 26, top + 101, 12, isSokoban ? '#6f6945' : isTetris ? '#9fb1ce' : P.muted)
+    text(c, title, 24, top + 70, 31, isSokoban ? '#26333a' : P.ink, 'left', true)
+    text(c, subtitle, 26, top + 101, 12, isSokoban ? '#6f6945' : P.muted)
     const cover = { x: 20, y: top + 122, w: width - 40, h: Math.min(310, Math.max(190, height * .38)) }
     box(c, cover, isSokoban ? '#aaa36c' : isTetris ? '#101c35' : 'rgba(255,250,237,.74)', 18, isSokoban ? '#5c5e3d' : isTetris ? '#c9ab68' : '#d0bea0')
     if (isSokoban) box(c, { x: cover.x + 6, y: cover.y + 6, w: cover.w - 12, h: cover.h - 12 }, null, 14, 'rgba(255,255,220,.38)')
@@ -199,12 +199,12 @@ function start({ context: c, screen: initialScreen, openGame }) {
         : ['箱子只能推、不能拉；每一步都会改变空间。', '先规划顺序，再利用回身空间处理窄门和深巷。', '避开角落死局，把全部木箱推到红色目标点。', `${selectedSokobanLevel.challenge} · ${selectedSokobanLevel.chapter} · ${selectedSokobanLevel.name}`]
       lines.forEach((line, index) => text(c, line, info.x + 14, info.y + 39 + index * 18, 12, '#4f573d', 'left'))
     } else if (isTetris) {
-      box(c, info, '#172846', 12, '#c9ab68')
-      text(c, '玩法说明', info.x + 14, info.y + 17, 14, '#f0d99a', 'left', true)
+      box(c, info, 'rgba(255,250,237,.74)', 12, '#d0bea0')
+      text(c, '玩法说明', info.x + 14, info.y + 17, 14, P.wine, 'left', true)
       const lines = height < 620
         ? ['移动、旋转方块，填满整行即可消除。', '下滑软降，上滑或按硬降快速落底。']
         : ['七种方块持续下落，填满整行即可消除。', '左右滑动移动，点击旋转；上滑或按硬降快速落底。', '消行越多等级越高，速度也会逐步加快。']
-      lines.forEach((line, index) => text(c, line, info.x + 14, info.y + 41 + index * 19, 12, '#d7e2f5', 'left'))
+      lines.forEach((line, index) => text(c, line, info.x + 14, info.y + 41 + index * 19, 12, P.ink, 'left'))
     } else {
       box(c, info, 'rgba(255,250,237,.74)', 12, '#d0bea0')
       text(c, '玩法说明', info.x + 14, info.y + 17, 13, P.wine, 'left', true)

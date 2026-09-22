@@ -24,6 +24,9 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
   let timerHandle = null
   let timerStartedAt = null
   let dragFrame = null
+  let pickerOpen = false
+  let pickerPage = 0
+  let pickerLayout = null
   const raf = typeof requestAnimationFrame === 'function'
     ? requestAnimationFrame
     : typeof wx.requestAnimationFrame === 'function' ? wx.requestAnimationFrame.bind(wx) : null
@@ -43,6 +46,8 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
     saveKey = `klotski.${level.id}.v1`
     bestKey = `klotski.${level.id}.best.v1`
     layout = makeLayout(screen)
+    pickerOpen = false
+    pickerLayout = null
     state = rules.initialState()
     best = 0
     storageWarning = false
@@ -82,8 +87,9 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
 
   function repaint() {
     if (active) renderer.draw({ c: context, layout, state, elapsedMs: currentElapsedMs(), selected, drag, modal,
-      portraits: portraits.portraits, best, storageWarning, level,
-      hasNextLevel: levels.findIndex(item => item.id === level.id) < levels.length - 1 })
+    portraits: portraits.portraits, best, storageWarning, level,
+      hasNextLevel: levels.findIndex(item => item.id === level.id) < levels.length - 1,
+      pickerOpen, pickerLayout, pickerLevels: levels })
   }
 
   function persist() {
@@ -178,19 +184,48 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
   }
 
   function buttonAt(touch) {
+    if (pickerOpen) {
+      if (contains(pickerLayout && pickerLayout.levelClose, touch)) return 'picker-close'
+      if (contains(pickerLayout && pickerLayout.levelPrev, touch)) return 'picker-prev'
+      if (contains(pickerLayout && pickerLayout.levelNext, touch)) return 'picker-next'
+      const row = pickerLayout && pickerLayout.levelRows.find(item => contains(item, touch))
+      return row ? `level:${row.id}` : null
+    }
     if (modal) {
       if (contains(layout.cancel, touch)) return 'cancel'
       if (contains(layout.confirm, touch)) return 'confirm'
       if (levels.findIndex(item => item.id === level.id) < levels.length - 1 && contains(layout.next, touch)) return 'next'
       return null
     }
-    for (const name of ['back', 'help', 'undo', 'reset', 'exit']) {
+    for (const name of ['back', 'picker', 'help', 'undo', 'reset', 'exit']) {
       if (contains(layout[name], touch)) return name
     }
     return null
   }
 
   function action(name) {
+    if (name === 'picker') {
+      pickerPage = Math.floor(Math.max(0, levels.findIndex(item => item.id === level.id)) / 8)
+      pickerOpen = true
+      pickerLayout = {
+        width: screen.width, height: screen.height,
+        picker: { x: 16, y: screen.top + 116, w: screen.width - 32, h: Math.min(screen.height - screen.top - screen.bottom - 132, 430) },
+        levelRows: [], levelPage: pickerPage,
+        levelClose: { x: screen.width - 70, y: screen.top + 128, w: 38, h: 34 }
+      }
+      stopTimer(); persist(); repaint(); return
+    }
+    if (name === 'picker-close') {
+      pickerOpen = false; pickerLayout = null
+      if (state.steps > 0 && !rules.isWon(state.pieces)) startTimer()
+      repaint(); return
+    }
+    if (name === 'picker-prev') { pickerPage = Math.max(0, pickerPage - 1); pickerLayout.levelPage = pickerPage; repaint(); return }
+    if (name === 'picker-next') { pickerPage = Math.min(Math.ceil(levels.length / 8) - 1, pickerPage + 1); pickerLayout.levelPage = pickerPage; repaint(); return }
+    if (name && name.startsWith('level:')) {
+      pickerOpen = false; pickerLayout = null
+      stopTimer(); loadLevel(name.slice(6)); repaint(); return
+    }
     if (name === 'back') { stopTimer(); persist(); goHome(); return }
     if (name === 'exit') { stopTimer(); persist(); goHome(); return }
     if (name === 'help') { stopTimer(); modal = 'rules' }
@@ -227,7 +262,7 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
     if (animation) cancelGesture()
     const button = buttonAt(t)
     if (button) { gesture = { touch: { ...t }, button }; return }
-    if (modal || rules.isWon(state.pieces)) return
+    if (modal || pickerOpen || rules.isWon(state.pieces)) return
     const { board, cell } = layout
     const x = (t.clientX - board.x) / cell
     const y = (t.clientY - board.y) / cell

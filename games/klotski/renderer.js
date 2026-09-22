@@ -1,4 +1,4 @@
-const { palette: P, path, box, text, gradient, background, button } = require('../../common/canvas.js')
+const { palette: P, path, box, text, gradient, background, button, headerButton } = require('../../common/canvas.js')
 const { drawLetter } = require('./lettering.js')
 
 const finishes = {
@@ -238,11 +238,13 @@ function formatDuration(elapsedMs) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
-function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, best, storageWarning, omittedPiece, level, hasNextLevel }) {
+function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, best, storageWarning, omittedPiece, level, hasNextLevel,
+  pickerOpen, pickerLayout, pickerLevels }) {
   const { width, height, top, board, cell } = layout
   background(c, width, height)
-  text(c, '‹  游戏合集', 24, top + 18, 13, P.muted)
-  text(c, '玩法', width - 44, top + 18, 13, P.muted, 'center')
+  headerButton(c, layout.back, '‹  游戏合集', { size: 10, color: P.ink })
+  headerButton(c, layout.picker, '选关', { color: P.ink })
+  headerButton(c, layout.help, '玩法', { color: P.ink })
   text(c, level ? level.name : '华容道', 25, top + 64, 31, P.ink, 'left', true)
   text(c, level ? level.subtitle : '一帅 · 五将 · 四兵', 26, top + 95, 12, P.muted)
   text(c, '计 时', width - 116, top + 52, 10, P.muted, 'center')
@@ -258,6 +260,7 @@ function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, b
   text(c, storageWarning ? '本机保存不可用，请勿关闭游戏' : '进度自动保存在本机', width / 2,
     layout.exit.y + layout.exit.h + 16, 10, storageWarning ? P.wine : P.muted, 'center')
   if (modal) drawDialog(c, layout, modal, state.steps, best, level && level.name, hasNextLevel)
+  if (pickerOpen && pickerLayout) drawLevelPicker(c, pickerLayout, pickerLevels || [], level && level.id)
 }
 
 // Cache the stationary scene while dragging. Only the moving tile is redrawn per frame.
@@ -321,7 +324,7 @@ function createRenderer() {
 
   return {
     draw(args) {
-      if (disabled || !args.selected || args.modal) { cachedKey = null; draw(args); return }
+      if (disabled || !args.selected || args.modal || args.pickerOpen) { cachedKey = null; draw(args); return }
       const { c, layout, state, selected, drag, portraits } = args
       try {
         if (!surface || cachedLayout !== layout) {

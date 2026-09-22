@@ -1,7 +1,9 @@
 function layout(screen) {
   const { width, height, top, bottom } = screen
   const compact = height < 630
-  const headerHeight = compact ? 104 : 132
+  // Keep the title, stats and timer in separate bands. The extra header
+  // height intentionally gives the playfield a little less vertical space.
+  const headerHeight = compact ? 128 : 156
   const controlHeight = compact ? 88 : 96
   const boardTop = top + headerHeight
   const controlsTop = height - bottom - controlHeight
@@ -20,7 +22,7 @@ function layout(screen) {
   const rowH = compact ? 38 : 42
   const secondW = (width - 44 - buttonGap) / 2
   const secondX = (width - secondW * 2 - buttonGap) / 2
-  const statY = top + (compact ? 64 : 72)
+  const statY = top + (compact ? 80 : 94)
   const statW = Math.min(72, (width - 126) / 3)
   const statX = 18
   const dialogW = Math.min(316, width - 32)

@@ -1,4 +1,4 @@
-const { box, text, gradient, background } = require('../../common/canvas.js')
+const { box, text, gradient, background, headerButton } = require('../../common/canvas.js')
 
 const SCENE = {
   ink: '#26333a', paper: '#f4e8c4', parchment: '#d6c58f', wood: '#d68126',
@@ -14,11 +14,6 @@ const CRATE_STYLES = [
   { fill: '#ed9a35', stroke: '#934b18', glow: 'rgba(78,43,11,.28)' },
   { fill: '#cf6e1d', stroke: '#773816', glow: 'rgba(78,43,11,.28)' }
 ]
-
-function formatDuration(elapsedMs) {
-  const seconds = Math.max(0, Math.floor((elapsedMs || 0) / 1000))
-  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
-}
 
 function tileRect(layout, x, y, inset = 0) {
   return { x: layout.board.x + x * layout.cell + inset, y: layout.board.y + y * layout.cell + inset,
@@ -53,10 +48,10 @@ function drawScene(c, layout) {
   c.fillStyle = 'rgba(255,255,231,.72)'; c.fillRect(0, layout.top + 106, layout.width, 2)
 }
 
-function drawHeader(c, layout, level, state, elapsedMs) {
-  text(c, '‹  游戏合集', 24, layout.top + 18, 13, SCENE.ink)
-  text(c, '选关', layout.picker.x + layout.picker.w / 2, layout.top + 18, 12, SCENE.ink, 'center')
-  text(c, '玩法', layout.help.x + layout.help.w / 2, layout.top + 18, 12, SCENE.ink, 'center')
+function drawHeader(c, layout, level, state) {
+  headerButton(c, layout.back, '‹  游戏合集', { size: 10, color: SCENE.ink })
+  headerButton(c, layout.picker, '选关', { color: SCENE.ink })
+  headerButton(c, layout.help, '玩法', { color: SCENE.ink })
   text(c, '推箱子', 25, layout.top + 53, 29, SCENE.ink, 'left', true)
   text(c, '经典仓库番 · 木箱只能推不能拉', 26, layout.top + 80, 10, '#6f6945')
   const plaque = { x: 24, y: layout.top + 95, w: layout.width - 48, h: 25 }
@@ -67,7 +62,6 @@ function drawHeader(c, layout, level, state, elapsedMs) {
   const statsY = layout.top + 45
   drawStat(c, { x: layout.width - 137, y: statsY, w: 56, h: 43 }, '步数', String(state.steps).padStart(2, '0'))
   drawStat(c, { x: layout.width - 76, y: statsY, w: 56, h: 43 }, '推箱', String(state.pushes).padStart(2, '0'))
-  text(c, `计时  ${formatDuration(elapsedMs)}`, layout.width / 2, layout.board.y + layout.board.h + 16, 10, '#6f6945', 'center')
 }
 
 function drawStat(c, rect, label, value) {
@@ -266,9 +260,9 @@ function drawDirectionPad(c, layout) {
   }
 }
 
-function draw({ c, layout, state, elapsedMs, modal, best, level, board, pickerOpen, pickerLevels, pickerLayout, hasNextLevel, deadlockReason }) {
+function draw({ c, layout, state, modal, best, level, board, pickerOpen, pickerLevels, pickerLayout, hasNextLevel, deadlockReason }) {
   drawScene(c, layout)
-  drawHeader(c, layout, level, state, elapsedMs)
+  drawHeader(c, layout, level, state)
   drawMap(c, layout, state, board)
   const matched = state.boxes.filter(position => board.goals.has(position)).length
   const status = deadlockReason || `目标归位 ${matched}/${state.boxes.length} · ${level.hint}`
@@ -281,4 +275,4 @@ function draw({ c, layout, state, elapsedMs, modal, best, level, board, pickerOp
   if (pickerOpen) drawLevelPicker(c, pickerLayout, pickerLevels, level.id)
 }
 
-module.exports = { draw, drawLevelPicker, formatDuration, drawGoal, drawCrate, drawMover, drawVoid, drawWall, drawFloor }
+module.exports = { draw, drawLevelPicker, drawGoal, drawCrate, drawMover, drawVoid, drawWall, drawFloor }
