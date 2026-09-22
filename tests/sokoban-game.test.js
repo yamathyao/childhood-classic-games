@@ -6,6 +6,7 @@ const { test } = require('node:test')
 const { layout } = require('../games/sokoban/layout.js')
 const { create } = require('../games/sokoban/rules.js')
 const { defaultLevel, getLevel, levels } = require('../games/sokoban/levels.js')
+const { homeCardLayout } = require('../games/index/game.js')
 
 function boot(options = {}) {
   const listeners = Object.fromEntries(['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize'].map(name => [name, new Set()]))
@@ -83,6 +84,48 @@ test('sokoban card opens a readable full-screen detail page before the board', (
   assert.ok(game.texts.some(item => item.text.includes('选择关卡')))
   game.tap(70, 30)
   assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
+})
+
+test('tetris card opens its detail page and routes into an independent scene', () => {
+  const game = boot()
+  const card = game.texts.find(item => item.text.includes('俄罗斯方块'))
+  assert.ok(card, 'missing tetris card')
+  game.tap(card.x, card.y)
+  assert.ok(game.texts.some(item => item.text.includes('俄罗斯方块')))
+  assert.ok(game.texts.some(item => item.text.includes('七种方块')))
+  assert.ok(game.texts.some(item => item.text.includes('进入游戏')))
+  const enter = game.texts.find(item => item.text.includes('进入游戏'))
+  game.tap(enter.x, enter.y)
+  assert.ok(game.texts.some(item => item.text.includes('硬降')))
+  assert.ok(game.texts.some(item => item.text.includes('下一个')))
+  const home = game.texts.find(item => item.text.includes('游戏合集'))
+  game.tap(home.x, home.y)
+  assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
+})
+
+test('all collection cards share one size and preview slot, and the list scrolls from a card', () => {
+  const screen = { width: 375, height: 812, top: 24, bottom: 16 }
+  const view = homeCardLayout(screen)
+  assert.equal(view.cards.length, 3)
+  assert.deepEqual(view.cards.map(card => [card.w, card.h]), [[view.cards[0].w, view.cards[0].h], [view.cards[0].w, view.cards[0].h], [view.cards[0].w, view.cards[0].h]])
+  const slots = view.cards.map(card => view.preview(card))
+  slots.forEach((rect, index) => {
+    assert.deepEqual([rect.x - view.cards[index].x, rect.y - view.cards[index].y, rect.w, rect.h],
+      [slots[0].x - view.cards[0].x, slots[0].y - view.cards[0].y, slots[0].w, slots[0].h])
+  })
+  assert.ok(view.maxScroll > 0)
+
+  const game = boot()
+  const third = game.texts.find(item => item.text.includes('俄罗斯方块'))
+  const before = game.texts.find(item => item.text === '华容道')
+  game.emit('Start', third.x, third.y)
+  game.emit('Move', third.x, third.y - 120)
+  const during = game.texts.find(item => item.text === '华容道')
+  assert.ok(during.y < before.y)
+  game.emit('End', third.x, third.y - 120)
+  const after = game.texts.find(item => item.text === '华容道')
+  assert.ok(after.y <= during.y)
+  assert.equal(game.texts.some(item => item.text === '玩法说明'), false)
 })
 
 test('won dialog advances to the next level', () => {
