@@ -18,6 +18,7 @@ test-results/
 
 # Generated visual previews and local review exports
 tmp/
+docs/
 art-source/*.png
 art-source/lettering/*.ttf
 

@@ -1,6 +1,6 @@
 # 童年经典游戏
 
-原生微信小游戏合集。当前收录「华容道 · 横刀立马」与「推箱子」，采用 Canvas 2D 绘制，可离线游玩。
+原生微信小游戏合集。当前收录「华容道 · 横刀立马」「推箱子」与「俄罗斯方块」，采用 Canvas 2D 绘制，可离线游玩。
 
 ## 当前状态
 
@@ -19,6 +19,9 @@
 - [x] 推箱子场景升级为经典“仓库番”主题：木墙、木地板、木箱、红色目标点与仓库工人
 - [x] 推箱子经典规则：木箱进入任意红色目标点即可完成，不要求箱子与目标配对
 - [x] 推箱子困局提示：静态死格与木箱互锁提示悔棋，关卡均有可回放的经典解
+- [x] 俄罗斯方块独立游戏模块：10×20 棋盘、七袋随机、旋转墙边修正与消行加速
+- [x] 俄罗斯方块支持手势与按钮双操作、软降/硬降、分数等级、最高分和本机存档
+- [x] 俄罗斯方块复古街机材质：深靛棋盘、黄铜边框与七种宝石色方块
 - [ ] 微信开发者工具预览包与真机最终验收
 
 ## 横刀立马
@@ -87,6 +90,11 @@ games/
     layout.js             # 推箱子棋盘与控件布局
     game.js               # 滑动、方向键、计时、选关与生命周期
     renderer.js           # 棋盘、箱子、方向键与弹层绘制
+  tetris/
+    rules.js              # 七种方块、旋转、墙边修正、消行、计分与存档
+    layout.js             # 俄罗斯方块竖屏棋盘与控制区布局
+    game.js               # 手势、按钮、计时、存档与游戏结束流程
+    renderer.js           # 街机棋盘、宝石方块、预览区与弹层绘制
 art-source/               # 美术源文件与生成提示词，不参与打包
 tests/                    # 规则与触摸回归测试，不参与打包
 tools/                    # 项目检查、关卡回放校验与浏览器视觉验收
@@ -99,7 +107,7 @@ tools/                    # 项目检查、关卡回放校验与浏览器视觉�
 使用 Node.js 20 或更新版本，无需安装依赖：
 
 ```sh
-node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js
+node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js tests/tetris-rules.test.js tests/tetris-layout.test.js tests/tetris-game.test.js
 npm run check
 npm run sokoban:verify
 ```
@@ -118,6 +126,8 @@ npm run sokoban:verify
 
 推箱子详情页参考维基百科[“倉庫番”](https://zh.wikipedia.org/wiki/%E5%80%89%E5%BA%AB%E7%95%AA)中经典仓库推箱子的木箱、目标标记与空间推理表达，素材均由 Canvas 2D 重新绘制，未直接打包来源截图；完整说明见 [docs/sokoban-materials.md](docs/sokoban-materials.md)。关卡文本来自 XSokoban 开源数据，项目保留原始来源和许可证说明。
 
+俄罗斯方块详情页采用复古街机方向：进入游戏后使用深靛蓝棋盘、黄铜边框和七种高对比宝石色方块；首页与详情页仍沿用合集纸张背景。规则为经典 10×20 棋盘、七袋随机、旋转墙边修正、软降、硬降和逐级加速，所有素材均由 Canvas 2D 本地绘制。
+
 棋子大字采用 [Ma Shan Zheng（马善政毛笔字）](https://github.com/googlefonts/mashanzheng)，按 SIL OFL 1.1 使用，许可随包保存在 `assets/lettering/OFL.txt`。仅提取“曹关张马赵黄卒”七个字的矢量轮廓（约 50 KB），通过 Canvas 路径绘制，避免设备系统字体差异与网络字体加载。小字保持原有风格。原始字体来自 Google Fonts，保存在不参与打包的 `art-source/lettering/`；Windows 下可运行 `./tools/build-piece-lettering.ps1` 重新生成轮廓。
 
 已生成两份仅供评审的本地预览：
@@ -131,4 +141,4 @@ npm run sokoban:verify
 
 - 接入原创武将插画并检查各尺寸裁切。
 - 完成微信真机验收，再完善音效与关卡扩展。
-- 在合集下增加下一款游戏，各游戏规则与资源独立组织。
+- 在合集下继续增加下一款游戏，各游戏规则与资源独立组织。
