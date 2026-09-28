@@ -113,6 +113,12 @@ function create(level) {
 
   function physics(state, events) {
     const { groups, supported, owners } = clusters(state)
+    if (supported.size === groups.length && !state.falling.length) {
+      settlePlayer(state, events)
+      state.combo = 0
+      checkWin(state)
+      return
+    }
     const previousFalling = new Set(state.falling)
     const landed = groups.filter((group, index) => supported.has(index) && group.cells.some(position => previousFalling.has(position)))
     const chains = landed.filter(group => group.color !== 'O' && group.cells.length >= 4)
@@ -230,7 +236,8 @@ function create(level) {
 
   function snapshot(state) {
     const { danger, ...saved } = state
-    return JSON.parse(JSON.stringify({ ...saved, version: 2, levelId: level.id }))
+    return { ...saved, grid: [...state.grid], falling: [...state.falling],
+      damage: { ...state.damage }, fallAges: { ...state.fallAges }, version: 2, levelId: level.id }
   }
 
   function restore(saved) {

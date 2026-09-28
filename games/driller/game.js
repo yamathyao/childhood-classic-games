@@ -21,18 +21,23 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
   let lastPersist = 0
   let saveFailed = false
   let lastPaint = 0
+  let dirty = true
+  let animationFrame = false
   const useAnimationFrame = typeof requestAnimationFrame === 'function'
+  const painter = renderer.createRenderer()
 
   function hasNext() { return state.status === 'won' && level.order < levels.length }
   function newSeed() { return (Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0 }
   function persist() {
     best = Math.max(best, state.score)
+    const previouslyFailed = saveFailed
     try {
       wx.setStorageSync('driller.currentLevel', level.id)
       wx.setStorageSync(rules.saveKey, rules.snapshot(state))
       wx.setStorageSync(rules.bestKey, best)
       saveFailed = false
     } catch (error) { saveFailed = true }
+    if (saveFailed !== previouslyFailed) dirty = true
     lastPersist = Date.now()
   }
   function load(nextLevel) {
@@ -48,7 +53,7 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
   }
   function stopFrame() {
     if (frame !== null) {
-      if (useAnimationFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame)
+      if (animationFrame && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(frame)
       else if (typeof clearTimeout === 'function') clearTimeout(frame)
     }
     frame = null; lastTick = null
@@ -60,9 +65,10 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
     const ease = 1 - Math.pow(1 - progress, 3)
     return Object.fromEntries(Object.keys(target).map(key => [key, motion[key] + (target[key] - motion[key]) * ease]))
   }
-  function showResult(result, before, duration = 130) {
-    if (result.events.length || before.playerX !== state.player % rules.width || before.playerY !== Math.floor(state.player / rules.width)) {
+  function showResult(result, before, duration = 130, playerChanged = false) {
+    if (result.events.length || playerChanged) {
       motion = { ...before, events: result.events, startedAt: Date.now(), duration }
+      dirty = true
     }
     best = Math.max(best, state.score)
     if (state.status !== 'playing') { modal = 'result'; gesture = null; lastTick = null; persist() }
@@ -74,8 +80,12 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
     lastTick = now
     if (delta > 0) {
       const before = pose()
+      const player = state.player
+      const oxygen = state.oxygen
+      const combo = state.combo
       const result = rules.tick(state, delta)
-      showResult(result, before, 95)
+      if (state.oxygen !== oxygen || state.combo !== combo) dirty = true
+      showResult(result, before, 95, state.player !== player)
       if (now - lastPersist >= 1000) persist()
     }
   }
@@ -89,16 +99,18 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
         gesture.repeatAt = Date.now() + 140
         dispatch(gesture.action)
       }
-      if (Date.now() - lastPaint >= 30 || modal) repaint()
+      if ((dirty || motion) && (Date.now() - lastPaint >= 30 || modal)) repaint()
       else schedule()
     }
-    if (useAnimationFrame) frame = requestAnimationFrame(callback)
-    else if (typeof setTimeout === 'function') frame = setTimeout(callback, 33)
+    animationFrame = useAnimationFrame && (Boolean(motion) || typeof setTimeout !== 'function')
+    if (animationFrame) frame = requestAnimationFrame(callback)
+    else if (typeof setTimeout === 'function') frame = setTimeout(callback, 50)
   }
   function repaint() {
     if (!active || hidden) return
     const progress = motion ? Math.min(1, (Date.now() - motion.startedAt) / motion.duration) : 1
-    renderer.draw({ context, view, level, state, modal, hasNext: hasNext(), motion, progress, saveFailed, best })
+    painter.draw({ context, view, level, state, modal, hasNext: hasNext(), motion, progress, saveFailed, best })
+    dirty = false
     if (progress >= 1) motion = null
     lastPaint = Date.now()
     schedule()
@@ -116,9 +128,10 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
     if (action === 'next' && hasNext()) { motion = null; stopFrame(); load(levels[level.order]); repaint(); return }
     if (modal) return
     const before = pose()
+    const player = state.player
     const result = rules.move(state, action)
     if (!result.changed) return
-    showResult(result, before)
+    showResult(result, before, 130, state.player !== player)
     if (lastTick === null) lastTick = Date.now()
     persist(); repaint()
   }
@@ -165,10 +178,10 @@ function start({ context, screen: initialScreen, goHome, levelId }) {
   repaint()
   return {
     resize(nextScreen) { advance(); cancel(); motion = null; screen = nextScreen; view = layout(screen, level); repaint() },
-    hide() { advance(); hidden = true; cancel(); motion = null; stopFrame(); if (state.status === 'playing') modal = 'pause'; persist() },
+    hide() { advance(); hidden = true; cancel(); motion = null; stopFrame(); painter.dispose(); if (state.status === 'playing') modal = 'pause'; persist() },
     show() { hidden = false; lastTick = null; repaint() },
     dispose() {
-      advance(); active = false; cancel(); motion = null; stopFrame(); persist()
+      advance(); active = false; cancel(); motion = null; stopFrame(); painter.dispose(); persist()
       wx.offTouchStart(onStart); wx.offTouchEnd(onEnd); wx.offTouchCancel(cancel)
       if (wx.offTouchMove) wx.offTouchMove(onMove)
     }

@@ -130,12 +130,14 @@ tools/                    # 项目检查、关卡回放校验与浏览器视觉�
 使用 Node.js 20 或更新版本，无需安装依赖：
 
 ```sh
-node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js tests/tetris-rules.test.js tests/tetris-layout.test.js tests/tetris-game.test.js
+npm test
 npm run check
 npm run sokoban:verify
 ```
 
 测试覆盖精确布局、长距离移动防穿透、计步与悔棋、存档回放、场景监听、误触重置、中断手势、多指干扰、100 次连续移动和完整解局。动画帧测试额外检查触摸事件合帧、快速松手落点、吸附期间接续操作及完整通关。测试用搜索器按等尺寸棋子合并状态，找出通关路径后，通过实际规则及触摸控制器重放；搜索器不包含在发布包中。
+
+资源回归可单独运行 `node --test --test-isolation=none tests/runtime-resources.test.js`：检查四个游戏的静止重绘次数、后台停止、退出清理，以及纹理缓存的容量和释放。华容道仅局部刷新计时，推箱子静止时不绘制，俄罗斯方块按棋盘变化绘制；钻地挑战在动画或可见状态变化时绘制，并缓存矿块纹理。高清像素密度保持原设置，实际 CPU、GPU、内存和耗电仍需在微信真机性能面板测量。
 
 视觉验收使用 `npm run visual:qa`，需要本机安装 Playwright 与浏览器。可通过 `PLAYWRIGHT_MODULE` 指向已有 Playwright 模块，通过 `CHROME_EXECUTABLE` 指定浏览器。该工具使用实际小游戏模块与浏览器微信适配层，输出 320×568、375×667、390×844 三种尺寸的截图与本地预览到 `tmp/qa/`，检查真实 Canvas 绘制、动画和进度恢复。
 

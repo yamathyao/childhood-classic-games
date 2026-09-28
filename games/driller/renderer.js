@@ -125,7 +125,7 @@ function drawModal(context, view, state, modal, hasNext) {
   modalButtons(view, modal, hasNext, state.status).forEach(rect => control(context, rect, labels[rect.action], ['next', 'resume', 'revive'].includes(rect.action)))
 }
 
-function draw({ context, view, level, state, modal, hasNext, motion, progress = 1, saveFailed, best }) {
+function draw({ context, view, level, state, modal, hasNext, motion, progress = 1, saveFailed, best, paintBlock = drawBlock, paintCapsule = drawCapsule }) {
   context.clearRect(0, 0, view.width, view.height)
   context.fillStyle = gradient(context, 0, 0, 0, view.height, ['#243c49', '#101f2b'])
   context.fillRect(0, 0, view.width, view.height)
@@ -155,14 +155,14 @@ function draw({ context, view, level, state, modal, hasNext, motion, progress = 
     const tile = tileAt(position)
     if (color === '.' || fallingTargets.has(position)) {
       context.fillStyle = '#203240'; context.fillRect(tile.x + tile.w / 2, tile.y + tile.h / 2, 1, 1)
-    } else if (color === 'O') drawCapsule(context, tile)
-    else drawBlock(context, tile, color, danger.has(position), state.damage[position])
+    } else if (color === 'O') paintCapsule(context, tile)
+    else paintBlock(context, tile, color, danger.has(position), state.damage[position])
   }
   falls.forEach(event => {
     const source = tileAt(event.from); const target = tileAt(event.to)
     const tile = { ...target, y: source.y + (target.y - source.y) * ease }
-    if (event.color === 'O') drawCapsule(context, tile)
-    else drawBlock(context, tile, event.color)
+    if (event.color === 'O') paintCapsule(context, tile)
+    else paintBlock(context, tile, event.color)
   })
   if (motion && progress < 1) {
     context.save(); context.globalAlpha = (1 - progress) * .65
@@ -190,4 +190,65 @@ function draw({ context, view, level, state, modal, hasNext, motion, progress = 
   if (modal && progress >= 1) drawModal(context, view, state, modal, hasNext)
 }
 
-module.exports = { draw, drawCover, drawBlock, drawCharacter, drawCapsule, modalButtons }
+function createRenderer() {
+  let atlas = null
+  let atlasContext = null
+  let cachedSize = 0
+  let cachedDpr = 0
+  let slot = 0
+  let disabled = false
+  const entries = new Map()
+
+  function dispose() {
+    if (atlas) { atlas.width = 1; atlas.height = 1 }
+    atlas = null; atlasContext = null; entries.clear()
+  }
+
+  function prepare(context, view) {
+    const size = view.cell - 2
+    const dpr = view.dpr || 1
+    if (atlas && size === cachedSize && dpr === cachedDpr) return
+    dispose()
+    if (disabled || typeof wx === 'undefined' || typeof wx.createOffscreenCanvas !== 'function' || !context.drawImage) return
+    try {
+      slot = Math.ceil((size + 4) * dpr)
+      const candidate = wx.createOffscreenCanvas({ type: '2d', width: slot * 5, height: slot * 4 })
+      if (!candidate || candidate === context.canvas || !candidate.getContext) throw new Error('Offscreen canvas unavailable')
+      const candidateContext = candidate.getContext('2d')
+      if (!candidateContext || candidateContext === context) throw new Error('Offscreen context unavailable')
+      atlas = candidate
+      atlas.width = slot * 5; atlas.height = slot * 4
+      atlasContext = candidateContext
+      atlasContext.scale(dpr, dpr)
+      cachedSize = size; cachedDpr = dpr
+    } catch (error) { disabled = true; dispose() }
+  }
+
+  function paintBlock(context, rect, color, danger = false, damage = 0) {
+    const direct = () => color === 'O' ? drawCapsule(context, rect) : drawBlock(context, rect, color, danger, damage)
+    if (!atlas || rect.w !== cachedSize || rect.h !== cachedSize) { direct(); return }
+    const key = `${color}:${danger}:${damage}`
+    try {
+      let entry = entries.get(key)
+      if (!entry) {
+        if (entries.size >= 20) { direct(); return }
+        entry = { x: (entries.size % 5) * slot, y: Math.floor(entries.size / 5) * slot }
+        const tile = { x: entry.x / cachedDpr + 2, y: entry.y / cachedDpr + 2, w: cachedSize, h: cachedSize }
+        if (color === 'O') drawCapsule(atlasContext, tile)
+        else drawBlock(atlasContext, tile, color, danger, damage)
+        entries.set(key, entry)
+      }
+      context.drawImage(atlas, entry.x, entry.y, slot, slot, rect.x - 2, rect.y - 2, slot / cachedDpr, slot / cachedDpr)
+    } catch (error) { disabled = true; dispose(); direct() }
+  }
+
+  return {
+    draw(args) {
+      prepare(args.context, args.view)
+      draw({ ...args, paintBlock, paintCapsule: (context, rect) => paintBlock(context, rect, 'O') })
+    },
+    dispose
+  }
+}
+
+module.exports = { draw, drawCover, drawBlock, drawCharacter, drawCapsule, modalButtons, createRenderer }

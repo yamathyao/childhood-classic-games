@@ -18,6 +18,37 @@ async function main() {
       page.on('pageerror', error => errors.push(error.message))
       await page.goto(pathToFileURL(preview).href)
       await page.waitForFunction(() => window.qa && qa.texts.some(item => item.text.includes('童 年 游 戏 馆')))
+      const materialMetrics = await page.evaluate(() => {
+        const renderer = qa.load('games/driller/renderer.js')
+        const level = qa.load('games/driller/levels.js').levels[0]
+        const state = qa.load('games/driller/rules.js').create(level).initialState(42)
+        const screen = qa.load('common/screen.js').measure()
+        const view = qa.load('games/driller/layout.js').layout(screen, level)
+        const surfaces = [0, 1].map(() => {
+          const surface = wx.createOffscreenCanvas({ width: screen.width * screen.dpr, height: screen.height * screen.dpr })
+          const context = surface.getContext('2d')
+          context.scale(screen.dpr, screen.dpr)
+          return context
+        })
+        const [direct, cached] = surfaces
+        const painter = renderer.createRenderer()
+        const args = { view, level, state, modal: null, best: 0 }
+        for (let index = 0; index < 10; index++) {
+          const position = view.columns * (2 + Math.floor(index / 5)) + 1 + index % 5
+          state.grid[position] = 'X'; state.damage[position] = index % 5
+          if (index >= 5) state.danger.push(position)
+        }
+        renderer.draw({ ...args, context: direct })
+        painter.draw({ ...args, context: cached })
+        const original = direct.getImageData(0, 0, direct.canvas.width, direct.canvas.height).data
+        const optimized = cached.getImageData(0, 0, cached.canvas.width, cached.canvas.height).data
+        let totalDifference = 0
+        for (let index = 0; index < original.length; index++) totalDifference += Math.abs(original[index] - optimized[index])
+        const meanDifference = totalDifference / original.length
+        painter.dispose()
+        return { meanDifference }
+      })
+      assert.ok(materialMetrics.meanDifference < 3, 'Texture atlas changed the materials: ' + JSON.stringify(materialMetrics))
       const click = async label => {
         const target = await page.evaluate(value => qa.texts.find(item => item.text === value) || qa.texts.find(item => item.text.includes(value)), label)
         assert.ok(target, 'Missing control: ' + label)

@@ -36,7 +36,6 @@ function start({ context: c, screen: initialScreen, goHome }) {
   let timerHandle = null
   let clockRunning = false
   let lastTickAt = null
-  let lastPersistAt = 0
 
   function load() {
     try { state = rules.restore(wx.getStorageSync('tetris.v1')) } catch (error) { state = rules.initialState() }
@@ -87,8 +86,7 @@ function start({ context: c, screen: initialScreen, goHome }) {
         stopClock()
         modal = 'over'
       }
-      if (now - lastPersistAt > 800 || result.changed) { persist(); lastPersistAt = now }
-      repaint()
+      if (result.changed) { persist(); repaint() }
     }, 50)
   }
 
@@ -130,7 +128,7 @@ function start({ context: c, screen: initialScreen, goHome }) {
     else if (name === 'rotate') result = rules.rotate(state)
     else if (name === 'hardDrop') result = rules.hardDrop(state)
     else return
-    if (!result.changed) { repaint(); return }
+    if (!result.changed) return
     state.started = true
     best = Math.max(best, state.score)
     if (state.gameOver) { stopClock(); modal = 'over' }
@@ -206,7 +204,7 @@ function start({ context: c, screen: initialScreen, goHome }) {
 
   return {
     resize(nextScreen) { cancel(); screen = nextScreen; layout = makeLayout(screen); repaint() },
-    hide() { cancel(); stopClock(); persist(); repaint() },
+    hide() { cancel(); stopClock(); persist() },
     show() { if (state.started && !state.gameOver && !modal) startClock(); repaint() },
     dispose() {
       active = false
