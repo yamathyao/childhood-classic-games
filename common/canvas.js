@@ -39,14 +39,16 @@ function gradient(c, x, y, w, h, colors) {
   return value
 }
 
-function background(c, width, height) {
-  c.clearRect(0, 0, width, height)
+function background(c, width, height, region) {
+  const area = region || { x: 0, y: 0, w: width, h: height }
+  if (!region) c.clearRect(0, 0, width, height)
   c.fillStyle = gradient(c, 0, 0, width, height, ['#f5efdf', '#e5d7bd'])
-  c.fillRect(0, 0, width, height)
+  c.fillRect(area.x, area.y, area.w, area.h)
   // Deterministic fine paper flecks, with no random shimmer on repaint.
   c.fillStyle = 'rgba(81,57,26,.035)'
-  for (let y = 3; y < height; y += 7) {
-    for (let x = (y * 19) % 17; x < width; x += 17) c.fillRect(x, y, 1, 1)
+  for (let y = 3 + Math.max(0, Math.ceil((area.y - 3) / 7)) * 7; y < area.y + area.h; y += 7) {
+    const offset = (y * 19) % 17
+    for (let x = offset + Math.max(0, Math.ceil((area.x - offset) / 17)) * 17; x < area.x + area.w; x += 17) c.fillRect(x, y, 1, 1)
   }
 }
 

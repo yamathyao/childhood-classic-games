@@ -238,6 +238,11 @@ function formatDuration(elapsedMs) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+function drawClock(context, layout, elapsedMs) {
+  background(context, layout.width, layout.height, { x: layout.width - 164, y: layout.top + 65, w: 96, h: 29 })
+  text(context, formatDuration(elapsedMs), layout.width - 116, layout.top + 80, 20, P.wine, 'center', true)
+}
+
 function draw({ c, layout, state, elapsedMs, selected, drag, modal, portraits, best, storageWarning, omittedPiece, level, hasNextLevel,
   pickerOpen, pickerLayout, pickerLevels }) {
   const { width, height, top, board, cell } = layout
@@ -284,10 +289,10 @@ function createRenderer() {
       for (const factory of factories) {
         try {
           const candidate = factory()
-          if (!candidate || candidate === mainContext || !candidate.getContext) continue
-          try { candidate.width = width; candidate.height = height } catch (error) {}
+          if (!candidate || candidate === mainContext || candidate === mainContext.canvas || !candidate.getContext) continue
           const candidateContext = candidate.getContext('2d') || candidate.getContext()
           if (candidateContext && candidateContext !== mainContext) {
+            try { candidate.width = width; candidate.height = height } catch (error) {}
             candidateContext.scale(dpr, dpr)
             return { surface: candidate, context: candidateContext }
           }
@@ -300,11 +305,11 @@ function createRenderer() {
     if (typeof wx.createCanvas === 'function') {
       try {
         const candidate = wx.createCanvas()
-        if (candidate && candidate !== mainContext && candidate.getContext) {
-          candidate.width = width
-          candidate.height = height
+        if (candidate && candidate !== mainContext && candidate !== mainContext.canvas && candidate.getContext) {
           const candidateContext = candidate.getContext('2d')
           if (candidateContext && candidateContext !== mainContext) {
+            candidate.width = width
+            candidate.height = height
             candidateContext.scale(dpr, dpr)
             return { surface: candidate, context: candidateContext }
           }
@@ -355,6 +360,7 @@ function createRenderer() {
         draw(args)
       }
     },
+    drawClock,
     dispose
   }
 }

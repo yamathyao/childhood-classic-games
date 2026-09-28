@@ -110,16 +110,18 @@ async function main() {
       const errors = []
       page.on('pageerror', error => errors.push(error.message))
       await page.goto('file:///' + preview.replace(/\\/g, '/'))
-      await page.waitForFunction(() => window.qa && qa.texts.some(t => t.text.includes('进入棋局')))
+      await page.waitForFunction(() => window.qa && qa.texts.some(t => t.text === '华容道'))
       await page.waitForTimeout(250)
       await page.screenshot({ path: path.join(output, `home-${width}.png`) })
+      const card = await page.evaluate(() => qa.texts.find(t => t.text === '华容道'))
+      await page.mouse.click(card.x, card.y)
       const homePicker = await page.evaluate(() => qa.texts.find(t => t.text.includes('选择对局')))
       await page.mouse.click(homePicker.x, homePicker.y)
-      await page.waitForFunction(() => qa.texts.some(t => t.text.includes('横竖皆将')))
+      await page.waitForFunction(() => qa.texts.some(t => t.text === '选择布局'))
       await page.screenshot({ path: path.join(output, `levels-${width}.png`) })
-      const variantRow = await page.evaluate(() => qa.texts.find(t => t.text.includes('横竖皆将')))
+      const variantRow = await page.evaluate(() => qa.texts.find(t => t.text === '横刀立马'))
       await page.mouse.click(variantRow.x, variantRow.y)
-      await page.waitForFunction(() => qa.texts.some(t => t.text.includes('横竖皆将')) && !qa.texts.some(t => t.text === '选择对局'))
+      await page.waitForFunction(() => qa.texts.some(t => t.text === '选择对局') && !qa.texts.some(t => t.text === '选择布局'))
       const start = await page.evaluate(() => qa.texts.find(t => t.text.includes('进入棋局')))
       await page.mouse.click(start.x, start.y)
       await page.waitForFunction(() => qa.texts.some(t => t.text === '步 数'))
@@ -169,6 +171,13 @@ async function main() {
         draw({ ...args, elapsedMs: 65000, c: direct })
         renderer.draw({ ...args, elapsedMs: 65000, c: cached })
         assertSame('updated state and timer')
+        const stationary = { ...args, selected: null, drag: null }
+        renderer.draw({ ...stationary, elapsedMs: 0, c: cached })
+        for (const elapsedMs of [65000, 3600000, 70000]) {
+          renderer.drawClock(cached, layout, elapsedMs)
+          draw({ ...stationary, elapsedMs, c: direct })
+          assertSame('partial clock refresh')
+        }
         renderer.dispose()
         const factory = wx.createOffscreenCanvas
         try {
@@ -183,8 +192,7 @@ async function main() {
       })
       // Exercise actual animation frames and rendering, absent from the synchronous unit adapter.
       const view = await page.evaluate(() => qa.load('games/klotski/layout.js').layout(qa.load('common/screen.js').measure()))
-      // s2 has a free cell below it in the selected three-lanes variant.
-      const x = view.board.x + 2.5 * view.cell
+      const x = view.board.x + 1.5 * view.cell
       const y = view.board.y + 3.5 * view.cell
       await page.mouse.move(x, y)
       await page.mouse.down()
@@ -192,7 +200,7 @@ async function main() {
       await page.screenshot({ path: path.join(output, `drag-${width}.png`) })
       await page.mouse.up()
       await page.waitForTimeout(200)
-      const snapshot = await page.evaluate(() => wx.getStorageSync('klotski.three-lanes.v1'))
+      const snapshot = await page.evaluate(() => wx.getStorageSync('klotski.classic.v1'))
       if (!snapshot || snapshot.history.length !== 1) throw new Error(`Animated move did not persist: ${JSON.stringify(snapshot)}`)
       // A complete gesture in one task arrives before any animation frame can run.
       await page.evaluate(({ x, y, cell }) => {
@@ -203,10 +211,12 @@ async function main() {
         qa.emit('TouchEnd', { changedTouches: [end], touches: [] })
       }, { x, y, cell: view.cell })
       await page.waitForTimeout(180)
-      const flick = await page.evaluate(() => wx.getStorageSync('klotski.three-lanes.v1'))
+      const flick = await page.evaluate(() => wx.getStorageSync('klotski.classic.v1'))
       if (flick.history.length !== 2 || flick.history[1].delta !== -1) throw new Error('Fast flick lost its release position')
       const home = await page.evaluate(() => qa.texts.find(t => t.text.includes('游戏合集')))
       await page.mouse.click(home.x, home.y)
+      const homeCard = await page.evaluate(() => qa.texts.find(t => t.text === '华容道'))
+      await page.mouse.click(homeCard.x, homeCard.y)
       const resume = await page.evaluate(() => qa.texts.find(t => t.text.includes('继续解局')))
       if (!resume) throw new Error('Home did not offer resume')
       await page.mouse.click(resume.x, resume.y)
@@ -220,4 +230,5 @@ async function main() {
   } finally { await browser.close() }
   console.log('Preview: ' + preview)
 }
-main().catch(error => { console.error(error); process.exitCode = 1 })
+if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })
+module.exports = { browserBoot, modules }

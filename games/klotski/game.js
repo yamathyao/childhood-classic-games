@@ -82,7 +82,11 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
 
   function startTimer() {
     if (timerStartedAt === null && !rules.isWon(state.pieces)) timerStartedAt = Date.now()
-    if (timerHandle === null && typeof setInterval === 'function') timerHandle = setInterval(repaint, 1000)
+    if (timerHandle === null && typeof setInterval === 'function') timerHandle = setInterval(() => {
+      if (!active || modal || pickerOpen) return
+      if (selected) repaint()
+      else renderer.drawClock(context, layout, currentElapsedMs())
+    }, 1000)
   }
 
   function repaint() {
@@ -334,8 +338,8 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
 
   return {
     resize(nextScreen) { cancelGesture(); layout = makeLayout(nextScreen); repaint() },
-    hide() { cancelGesture(); stopTimer(); persist() },
-    show() { if (state.steps > 0 && !rules.isWon(state.pieces)) startTimer(); repaint() },
+    hide() { cancelGesture(); stopTimer(); renderer.dispose(); persist() },
+    show() { if (state.steps > 0 && !rules.isWon(state.pieces) && !modal && !pickerOpen) startTimer(); repaint() },
     dispose() {
       cancelGesture()
       stopTimer()

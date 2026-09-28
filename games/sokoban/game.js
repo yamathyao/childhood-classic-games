@@ -30,7 +30,6 @@ function start({ context, screen, goHome, levelId }) {
   let pickerLayout = null
   let gesture = null
   let timerStartedAt = null
-  let timerHandle = null
   let active = true
   let storageWarning = false
 
@@ -70,13 +69,10 @@ function start({ context, screen, goHome, levelId }) {
   function stopTimer() {
     checkpointClock()
     timerStartedAt = null
-    if (timerHandle !== null && typeof clearInterval === 'function') clearInterval(timerHandle)
-    timerHandle = null
   }
 
   function startTimer() {
     if (timerStartedAt === null && !rules.isWon(state)) timerStartedAt = Date.now()
-    if (timerHandle === null && typeof setInterval === 'function') timerHandle = setInterval(repaint, 1000)
   }
 
   function persist() {

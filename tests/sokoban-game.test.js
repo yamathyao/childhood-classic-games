@@ -120,8 +120,8 @@ test('tetris card opens its detail page and routes into an independent scene', (
 test('all collection cards share one size and preview slot, and the list scrolls from a card', () => {
   const screen = { width: 375, height: 812, top: 24, bottom: 16 }
   const view = homeCardLayout(screen)
-  assert.equal(view.cards.length, 3)
-  assert.deepEqual(view.cards.map(card => [card.w, card.h]), [[view.cards[0].w, view.cards[0].h], [view.cards[0].w, view.cards[0].h], [view.cards[0].w, view.cards[0].h]])
+  assert.equal(view.cards.length, 4)
+  view.cards.forEach(card => assert.deepEqual([card.w, card.h], [view.cards[0].w, view.cards[0].h]))
   const slots = view.cards.map(card => view.preview(card))
   slots.forEach((rect, index) => {
     assert.deepEqual([rect.x - view.cards[index].x, rect.y - view.cards[index].y, rect.w, rect.h],
@@ -199,4 +199,22 @@ test('sokoban save is isolated from klotski save', () => {
   game.clickText('退出棋局')
   assert.equal(game.storage.get(create(defaultLevel).saveKey).history.length, 1)
   assert.equal(game.storage.has('klotski.classic.v1'), false)
+})
+
+test('fourth card scrolls into view, opens driller details and selects a level before playing', () => {
+  const game = boot()
+  game.emit('Start', 180, 700)
+  game.emit('Move', 180, 170)
+  game.emit('End', 180, 170)
+  game.clickText('钻地挑战')
+  assert.ok(game.texts.some(item => item.text.includes('氧气实时减少')))
+  game.clickText('选择关卡')
+  game.clickText('1000 米 · 深井挑战')
+  assert.equal(game.storage.get('driller.currentLevel'), 'arcade-1000')
+  game.clickText('进入游戏')
+  assert.ok(game.texts.some(item => item.text.includes('向上钻')))
+  assert.equal(game.listeners.TouchStart.size, 1)
+  game.clickText('游戏合集')
+  assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
+  assert.equal(game.listeners.TouchStart.size, 1)
 })

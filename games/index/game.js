@@ -7,6 +7,9 @@ const { levels: sokobanLevels, getLevel: getSokobanLevel, defaultLevel: defaultS
 const { create: createSokoban } = require('../sokoban/rules.js')
 const { drawGoal, drawCrate, drawMover, drawVoid, drawWall, drawFloor } = require('../sokoban/renderer.js')
 const { drawCover: drawTetrisCover } = require('../tetris/renderer.js')
+const { drawCover: drawDrillerCover } = require('../driller/renderer.js')
+const drillerLobby = require('../driller/lobby.js')
+const { levels: drillerLevels, getLevel: getDrillerLevel, defaultLevel: defaultDrillerLevel } = require('../driller/levels.js')
 
 function drawSokobanPreview(c, rect, level) {
   const rules = createSokoban(level)
@@ -39,9 +42,9 @@ function homeCardLayout(screen, scroll = 0) {
   const cardX = 22
   const cardW = width - cardX * 2
   const firstY = top + 128 - scroll
-  const cards = [0, 1, 2].map(index => ({ x: cardX, y: firstY + index * (cardHeight + cardGap), w: cardW, h: cardHeight }))
+  const cards = [0, 1, 2, 3].map(index => ({ x: cardX, y: firstY + index * (cardHeight + cardGap), w: cardW, h: cardHeight }))
   const preview = card => ({ x: card.x + 18, y: card.y + 66, w: card.w - 36, h: Math.max(72, card.h - 94) })
-  const contentBottom = top + 128 + (cardHeight + cardGap) * 2 + cardHeight
+  const contentBottom = top + 128 + (cardHeight + cardGap) * (cards.length - 1) + cardHeight
   const maxScroll = Math.max(0, contentBottom - (height - bottom - 18))
   return { cards, preview, cardHeight, maxScroll }
 }
@@ -63,8 +66,10 @@ function start({ context: c, screen: initialScreen, openGame }) {
   let detailEnter
   let selectedId = defaultLevel.id
   let selectedSokobanId = defaultSokobanLevel.id
+  let selectedDrillerId = defaultDrillerLevel.id
   try { selectedId = getLevel(wx.getStorageSync('klotski.currentLevel')).id } catch (error) {}
   try { selectedSokobanId = getSokobanLevel(wx.getStorageSync('sokoban.currentLevel')).id } catch (error) {}
+  try { selectedDrillerId = getDrillerLevel(wx.getStorageSync('driller.currentLevel')).id } catch (error) {}
   let selectedLevel = getLevel(selectedId)
   let selectedRules = create(selectedLevel)
   let saved = null
@@ -96,7 +101,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     text(c, '重拾方寸间的乐趣', 24, top + 69, 27, P.ink, 'left', true)
     text(c, '熟悉的规则，值得再玩一次。', 25, top + 103, 13, P.muted)
     const home = homeCardLayout(screen, homeScroll)
-    const [card, second, third] = home.cards
+    const [card, second, third, fourth] = home.cards
     const cardHeight = home.cardHeight
     const listTop = top + 118
     const listBottom = height - bottom - 22
@@ -126,10 +131,17 @@ function start({ context: c, screen: initialScreen, openGame }) {
       drawTetrisCover(c, home.preview(third), { compact: true })
       text(c, '点击卡片查看详情', width / 2, third.y + third.h - 18, 10, P.muted, 'center')
     }
+    if (fourth.y + fourth.h > top && fourth.y < height - bottom) {
+      box(c, fourth, 'rgba(255,250,237,.65)', 16, '#d0bea0')
+      text(c, '04  /  矿层冒险', fourth.x + 18, fourth.y + 22, 10, P.muted)
+      text(c, '钻地挑战', fourth.x + 18, fourth.y + 51, 23, P.ink, 'left', true)
+      drawDrillerCover(c, home.preview(fourth))
+      text(c, '点击卡片查看详情', width / 2, fourth.y + fourth.h - 18, 10, P.muted, 'center')
+    }
     c.restore()
     homeScrollMax = home.maxScroll
     text(c, homeScrollMax > 0 ? '上下滑动浏览 · 点击卡片查看详情' : '点击卡片查看详情', width / 2, height - bottom - 8, 10, P.muted, 'center')
-    homeCards = { klotski: card, sokoban: second, tetris: third }
+    homeCards = { klotski: card, sokoban: second, tetris: third, driller: fourth }
     if (pickerOpen) {
       pickerLayout = {
         width, height, picker: { x: 16, y: top + 116, w: width - 32, h: Math.min(height - top - bottom - 132, 430) },
@@ -170,6 +182,12 @@ function start({ context: c, screen: initialScreen, openGame }) {
 
   function drawDetail() {
     const { width, height, top, bottom } = screen
+    if (detailGame === 'driller') {
+      const controls = drillerLobby.drawDetail(c, screen, getDrillerLevel(selectedDrillerId))
+      detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
+      if (pickerOpen) pickerLayout = drillerLobby.drawPicker(c, screen, selectedDrillerId, pickerPage)
+      return
+    }
     detailBack = { x: 18, y: top + 5, w: 105, h: 32 }
     text(c, '‹  游戏合集', detailBack.x + 4, detailBack.y + 16, 13, detailGame === 'sokoban' ? '#566044' : P.muted)
     const isSokoban = detailGame === 'sokoban'
@@ -258,12 +276,13 @@ function start({ context: c, screen: initialScreen, openGame }) {
     if (detailGame) {
       if (contains(detailBack, t)) pressed = { ...t, action: 'back' }
       else if (contains(detailSelect, t)) pressed = { ...t, action: 'levels' }
-      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
+      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
       return
     }
     if (contains(homeCards.klotski, t)) pressed = { ...t, action: 'detail-klotski', lastY: t.clientY, moved: false }
     else if (contains(homeCards.sokoban, t)) pressed = { ...t, action: 'detail-sokoban', lastY: t.clientY, moved: false }
     else if (contains(homeCards.tetris, t)) pressed = { ...t, action: 'detail-tetris', lastY: t.clientY, moved: false }
+    else if (contains(homeCards.driller, t)) pressed = { ...t, action: 'detail-driller', lastY: t.clientY, moved: false }
     else pressed = { ...t, action: 'home-scroll', lastY: t.clientY, moved: false }
   }
   function onMove(e) {
@@ -271,7 +290,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     const t = (e.touches || e.changedTouches || []).find(touch => touch.identifier === pressed.identifier)
     if (!t) return
     const action = pressed.action
-    if (action !== 'home-scroll' && action !== 'detail-klotski' && action !== 'detail-sokoban' && action !== 'detail-tetris') return
+    if (action !== 'home-scroll' && !action.startsWith('detail-')) return
     if (Math.abs(t.clientY - pressed.clientY) >= 6) pressed.moved = true
     if (!pressed.moved) return
     const delta = pressed.lastY - t.clientY
@@ -295,12 +314,14 @@ function start({ context: c, screen: initialScreen, openGame }) {
       repaint()
       return
     }
-    if ((action === 'detail-klotski' || action === 'detail-sokoban' || action === 'detail-tetris') && (moved || !tap)) {
+    if (action.startsWith('detail-') && (moved || !tap)) {
       homeScroll = Math.max(0, Math.min(homeScrollMax, homeScroll + (moved ? lastY - t.clientY : startY - t.clientY)))
       repaint()
       return
     }
     if (!tap) return
+    if (action === 'detail-driller') { detailGame = 'driller'; pickerOpen = false; repaint(); return }
+    if (action === 'driller-start') { openGame('driller', selectedDrillerId); return }
     if (action === 'detail-klotski') { detailGame = 'klotski'; pickerOpen = false; repaint() }
     else if (action === 'detail-sokoban') { detailGame = 'sokoban'; pickerOpen = false; repaint() }
     else if (action === 'detail-tetris') { detailGame = 'tetris'; pickerOpen = false; repaint() }
@@ -309,16 +330,21 @@ function start({ context: c, screen: initialScreen, openGame }) {
     else if (action === 'sokoban-start') openGame('sokoban', selectedSokobanId)
     else if (action === 'tetris-start') openGame('tetris')
     else if (action === 'levels') {
-      const source = detailGame === 'sokoban' ? sokobanLevels : levels
-      const selected = detailGame === 'sokoban' ? selectedSokobanId : selectedId
+      const source = detailGame === 'driller' ? drillerLevels : detailGame === 'sokoban' ? sokobanLevels : levels
+      const selected = detailGame === 'driller' ? selectedDrillerId : detailGame === 'sokoban' ? selectedSokobanId : selectedId
       pickerPage = Math.floor(Math.max(0, source.findIndex(level => level.id === selected)) / 8)
       pickerOpen = true; repaint()
     }
     else if (action === 'close') { pickerOpen = false; repaint() }
     else if (action === 'prev') { pickerPage = Math.max(0, pickerPage - 1); repaint() }
     else if (action === 'next') {
-      const source = detailGame === 'sokoban' ? sokobanLevels : levels
+      const source = detailGame === 'driller' ? drillerLevels : detailGame === 'sokoban' ? sokobanLevels : levels
       pickerPage = Math.min(Math.ceil(source.length / 8) - 1, pickerPage + 1); repaint()
+    }
+    else if (drillerLevels.some(level => level.id === action)) {
+      selectedDrillerId = action
+      try { wx.setStorageSync('driller.currentLevel', selectedDrillerId) } catch (error) {}
+      pickerOpen = false; repaint()
     }
     else if (levels.some(level => level.id === action)) {
       selectedId = action
