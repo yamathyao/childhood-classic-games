@@ -1,6 +1,6 @@
 const rulesApi = require('./rules.js')
 const { levels, getLevel, defaultLevel } = require('./levels.js')
-const { layout: makeLayout } = require('./layout.js')
+const { layout: makeLayout, dialogLayout } = require('./layout.js')
 const { createRenderer } = require('./renderer.js')
 const { contains } = require('../../common/canvas.js')
 const { loadPortraits } = require('./art.js')
@@ -196,9 +196,10 @@ function start({ context, screen, goHome, levelId = defaultLevel.id }) {
       return row ? `level:${row.id}` : null
     }
     if (modal) {
-      if (contains(layout.cancel, touch)) return 'cancel'
-      if (contains(layout.confirm, touch)) return 'confirm'
-      if (levels.findIndex(item => item.id === level.id) < levels.length - 1 && contains(layout.next, touch)) return 'next'
+      const buttons = dialogLayout(layout, modal)
+      if (contains(buttons.cancel, touch)) return 'cancel'
+      if (contains(buttons.confirm, touch)) return 'confirm'
+      if (modal === 'won' && levels.findIndex(item => item.id === level.id) < levels.length - 1 && contains(buttons.next, touch)) return 'next'
       return null
     }
     for (const name of ['back', 'picker', 'help', 'undo', 'reset', 'exit']) {
