@@ -8,9 +8,6 @@ function layout(screen) {
   const controlsX = (width - buttonW * 2 - 12) / 2
   const dialogW = Math.min(310, width - 36)
   const dialog = { x: (width - dialogW) / 2, y: (height - 250) / 2, w: dialogW, h: 250 }
-  const dialogButtonGap = 6
-  const dialogButtonX = dialog.x + 12
-  const dialogButtonW = (dialogW - 24 - dialogButtonGap * 2) / 3
   return {
     ...screen, board, cell,
     back: { x: 20, y: top, w: 88, h: 36 },
@@ -21,9 +18,19 @@ function layout(screen) {
     exit: { x: controlsX, y: controlsY + 54, w: buttonW * 2 + 12, h: 38 },
     dialog,
     cancel: { x: dialog.x + 20, y: dialog.y + 190, w: (dialogW - 50) / 2, h: 42 },
-    confirm: { x: dialog.x + dialogW / 2 + 5, y: dialog.y + 190, w: (dialogW - 50) / 2, h: 42 },
-    next: { x: dialogButtonX + (dialogButtonW + dialogButtonGap) * 2, y: dialog.y + 190, w: dialogButtonW, h: 42 },
-    nextEnabled: false
+    confirm: { x: dialog.x + dialogW / 2 + 5, y: dialog.y + 190, w: (dialogW - 50) / 2, h: 42 }
   }
 }
-module.exports = { layout }
+function dialogLayout(view, type) {
+  if (type !== 'won') return { dialog: view.dialog, cancel: view.cancel, confirm: view.confirm }
+  const dialog = { ...view.dialog, y: (view.height - 278) / 2, h: 278 }
+  const buttonWidth = (dialog.w - 50) / 2
+  return {
+    dialog,
+    cancel: { x: dialog.x + 20, y: dialog.y + 154, w: buttonWidth, h: 44 },
+    confirm: { x: dialog.x + 30 + buttonWidth, y: dialog.y + 154, w: buttonWidth, h: 44 },
+    next: { x: dialog.x + 20, y: dialog.y + 208, w: dialog.w - 40, h: 48 }
+  }
+}
+
+module.exports = { layout, dialogLayout }

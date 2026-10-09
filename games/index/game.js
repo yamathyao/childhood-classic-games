@@ -9,7 +9,11 @@ const { drawGoal, drawCrate, drawMover, drawVoid, drawWall, drawFloor } = requir
 const { drawCover: drawTetrisCover } = require('../tetris/renderer.js')
 const { drawCover: drawDrillerCover } = require('../driller/renderer.js')
 const drillerLobby = require('../driller/lobby.js')
+const textbattleLobby = require('../textbattle/lobby.js')
+const { drawCover: drawTextbattleCover } = require('../textbattle/renderer.js')
+const { loadSprites: loadTextbattleSprites } = require('../textbattle/art.js')
 const { levels: drillerLevels, getLevel: getDrillerLevel, defaultLevel: defaultDrillerLevel } = require('../driller/levels.js')
+const { games, saveKey: orderSaveKey, longPressMs, normalizeOrder, moveGame, sortLayout, drawSort } = require('./order.js')
 
 function drawSokobanPreview(c, rect, level) {
   const rules = createSokoban(level)
@@ -42,7 +46,7 @@ function homeCardLayout(screen, scroll = 0) {
   const cardX = 22
   const cardW = width - cardX * 2
   const firstY = top + 128 - scroll
-  const cards = [0, 1, 2, 3].map(index => ({ x: cardX, y: firstY + index * (cardHeight + cardGap), w: cardW, h: cardHeight }))
+  const cards = games.map((_, index) => ({ x: cardX, y: firstY + index * (cardHeight + cardGap), w: cardW, h: cardHeight }))
   const preview = card => ({ x: card.x + 18, y: card.y + 66, w: card.w - 36, h: Math.max(72, card.h - 94) })
   const contentBottom = top + 128 + (cardHeight + cardGap) * (cards.length - 1) + cardHeight
   const maxScroll = Math.max(0, contentBottom - (height - bottom - 18))
@@ -61,6 +65,13 @@ function start({ context: c, screen: initialScreen, openGame }) {
   let homeScroll = 0
   let homeScrollMax = 0
   let scrollFrame = null
+  let longPressTimer = null
+  let gameOrder = normalizeOrder(null)
+  try { gameOrder = normalizeOrder(wx.getStorageSync(orderSaveKey)) } catch (error) {}
+  let sortOrder = null
+  let sortDrag = null
+  let sortSelected = null
+  let sortWarning = ''
   let detailBack
   let detailSelect
   let detailEnter
@@ -88,11 +99,16 @@ function start({ context: c, screen: initialScreen, openGame }) {
   }
   loadSelected()
   const art = loadPortraits(repaint)
+  const textbattleArt = loadTextbattleSprites(repaint)
 
   function repaint() {
     if (!active) return
     const { width, height, top, bottom } = screen
     background(c, width, height)
+    if (sortOrder) {
+      drawSort(c, screen, sortOrder, sortDrag, sortSelected, sortWarning, drawPreview)
+      return
+    }
     if (detailGame) {
       drawDetail()
       return
@@ -101,47 +117,25 @@ function start({ context: c, screen: initialScreen, openGame }) {
     text(c, '重拾方寸间的乐趣', 24, top + 69, 27, P.ink, 'left', true)
     text(c, '熟悉的规则，值得再玩一次。', 25, top + 103, 13, P.muted)
     const home = homeCardLayout(screen, homeScroll)
-    const [card, second, third, fourth] = home.cards
-    const cardHeight = home.cardHeight
     const listTop = top + 118
     const listBottom = height - bottom - 22
+    homeCards = {}
     c.save()
     c.beginPath(); c.moveTo(0, listTop); c.lineTo(width, listTop); c.lineTo(width, listBottom); c.lineTo(0, listBottom); c.closePath(); c.clip()
-    if (card.y + card.h > top && card.y < height - bottom) {
+    gameOrder.forEach((id, index) => {
+      const card = home.cards[index]
+      homeCards[id] = card
+      if (card.y + card.h <= listTop || card.y >= listBottom) return
+      const game = games.find(game => game.id === id)
       box(c, card, 'rgba(255,250,237,.65)', 16, '#d0bea0')
-      text(c, '01  /  经典益智', card.x + 18, card.y + 22, 10, P.muted)
-      text(c, '华容道', card.x + 18, card.y + 51, 23, P.ink, 'left', true)
-      const preview = home.preview(card)
-      const cell = Math.min(28, preview.w / 4, preview.h / 5)
-      const board = { x: preview.x + (preview.w - cell * 4) / 2, y: preview.y + (preview.h - cell * 5) / 2, w: cell * 4, h: cell * 5 }
-      drawBoard(c, board, cell, selectedLevel.pieces, null, null, art.portraits)
-      text(c, '点击卡片查看详情', width / 2, card.y + card.h - 18, 10, P.muted, 'center')
-    }
-    if (second.y + second.h > top && second.y < height - bottom) {
-      box(c, second, 'rgba(255,250,237,.65)', 16, '#d0bea0')
-      text(c, '02  /  经典益智', second.x + 18, second.y + 22, 10, P.muted)
-      text(c, '推箱子', second.x + 18, second.y + 51, 23, P.ink, 'left', true)
-      drawSokobanPreview(c, home.preview(second), selectedSokobanLevel)
-      text(c, '点击卡片查看详情', width / 2, second.y + second.h - 18, 10, P.muted, 'center')
-    }
-    if (third.y + third.h > top && third.y < height - bottom) {
-      box(c, third, 'rgba(255,250,237,.65)', 16, '#d0bea0')
-      text(c, '03  /  经典街机', third.x + 18, third.y + 22, 10, P.muted)
-      text(c, '俄罗斯方块', third.x + 18, third.y + 51, 23, P.ink, 'left', true)
-      drawTetrisCover(c, home.preview(third), { compact: true })
-      text(c, '点击卡片查看详情', width / 2, third.y + third.h - 18, 10, P.muted, 'center')
-    }
-    if (fourth.y + fourth.h > top && fourth.y < height - bottom) {
-      box(c, fourth, 'rgba(255,250,237,.65)', 16, '#d0bea0')
-      text(c, '04  /  矿层冒险', fourth.x + 18, fourth.y + 22, 10, P.muted)
-      text(c, '钻地挑战', fourth.x + 18, fourth.y + 51, 23, P.ink, 'left', true)
-      drawDrillerCover(c, home.preview(fourth))
-      text(c, '点击卡片查看详情', width / 2, fourth.y + fourth.h - 18, 10, P.muted, 'center')
-    }
+      text(c, `${String(index + 1).padStart(2, '0')}  /  ${game.category}`, card.x + 18, card.y + 22, 10, P.muted)
+      text(c, game.name, card.x + 18, card.y + 51, 23, P.ink, 'left', true)
+      drawPreview(id, home.preview(card))
+      text(c, '点击查看详情 · 长按调整顺序', width / 2, card.y + card.h - 18, 10, P.muted, 'center')
+    })
     c.restore()
     homeScrollMax = home.maxScroll
-    text(c, homeScrollMax > 0 ? '上下滑动浏览 · 点击卡片查看详情' : '点击卡片查看详情', width / 2, height - bottom - 8, 10, P.muted, 'center')
-    homeCards = { klotski: card, sokoban: second, tetris: third, driller: fourth }
+    text(c, homeScrollMax > 0 ? '上下滑动浏览 · 长按卡片排序' : '长按卡片可调整顺序', width / 2, height - bottom - 8, 10, P.muted, 'center')
     if (pickerOpen) {
       pickerLayout = {
         width, height, picker: { x: 16, y: top + 116, w: width - 32, h: Math.min(height - top - bottom - 132, 430) },
@@ -150,6 +144,17 @@ function start({ context: c, screen: initialScreen, openGame }) {
       }
       drawLevelPicker(c, pickerLayout, levels, selectedId)
     }
+  }
+
+  function drawPreview(id, preview) {
+    if (id === 'klotski') {
+      const cell = Math.min(28, preview.w / 4, preview.h / 5)
+      const board = { x: preview.x + (preview.w - cell * 4) / 2, y: preview.y + (preview.h - cell * 5) / 2, w: cell * 4, h: cell * 5 }
+      drawBoard(c, board, cell, selectedLevel.pieces, null, null, art.portraits)
+    } else if (id === 'sokoban') drawSokobanPreview(c, preview, selectedSokobanLevel)
+    else if (id === 'tetris') drawTetrisCover(c, preview, { compact: true })
+    else if (id === 'driller') drawDrillerCover(c, preview)
+    else if (id === 'textbattle') drawTextbattleCover(c, preview, textbattleArt)
   }
 
   function drawSokobanPicker() {
@@ -182,6 +187,11 @@ function start({ context: c, screen: initialScreen, openGame }) {
 
   function drawDetail() {
     const { width, height, top, bottom } = screen
+    if (detailGame === 'textbattle') {
+      const controls = textbattleLobby.drawDetail(c, screen, textbattleArt)
+      detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
+      return
+    }
     if (detailGame === 'driller') {
       const controls = drillerLobby.drawDetail(c, screen, getDrillerLevel(selectedDrillerId))
       detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
@@ -259,9 +269,37 @@ function start({ context: c, screen: initialScreen, openGame }) {
     scrollFrame = null
   }
 
+  function cancelLongPress() {
+    if (longPressTimer !== null) clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+
+  function updateSortDrag(t) {
+    if (!sortDrag) return
+    const view = sortLayout(screen)
+    sortDrag.y = Math.max(view.listTop, Math.min(view.rows[view.rows.length - 1].y, t.clientY - sortDrag.offset))
+    const index = Math.round((sortDrag.y - view.listTop) / view.stride)
+    sortOrder = moveGame(sortOrder, sortDrag.id, index)
+    scheduleScrollRepaint()
+  }
+
   function onStart(e) {
     if (!active || pressed) return
     const t = e.changedTouches[0] || e.touches[0]
+    if (sortOrder) {
+      const view = sortLayout(screen)
+      if (contains(view.cancel, t)) pressed = { ...t, action: 'sort-cancel' }
+      else if (contains(view.done, t)) pressed = { ...t, action: 'sort-done' }
+      else {
+        const index = view.rows.findIndex(row => contains(row, t))
+        if (index < 0) return
+        sortSelected = sortOrder[index]
+        sortDrag = { id: sortSelected, y: view.rows[index].y, offset: t.clientY - view.rows[index].y, originalOrder: sortOrder.slice() }
+        pressed = { ...t, action: 'sort-drag' }
+        repaint()
+      }
+      return
+    }
     if (pickerOpen) {
       const rows = pickerLayout && (pickerLayout.levelRows || pickerLayout.rows)
       const row = rows && rows.find(item => contains(item, t))
@@ -276,22 +314,39 @@ function start({ context: c, screen: initialScreen, openGame }) {
     if (detailGame) {
       if (contains(detailBack, t)) pressed = { ...t, action: 'back' }
       else if (contains(detailSelect, t)) pressed = { ...t, action: 'levels' }
-      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
+      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'textbattle' ? 'textbattle-start' : detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
       return
     }
-    if (contains(homeCards.klotski, t)) pressed = { ...t, action: 'detail-klotski', lastY: t.clientY, moved: false }
-    else if (contains(homeCards.sokoban, t)) pressed = { ...t, action: 'detail-sokoban', lastY: t.clientY, moved: false }
-    else if (contains(homeCards.tetris, t)) pressed = { ...t, action: 'detail-tetris', lastY: t.clientY, moved: false }
-    else if (contains(homeCards.driller, t)) pressed = { ...t, action: 'detail-driller', lastY: t.clientY, moved: false }
-    else pressed = { ...t, action: 'home-scroll', lastY: t.clientY, moved: false }
+    if (t.clientY < screen.top + 118 || t.clientY >= screen.height - screen.bottom - 22) return
+    const id = gameOrder.find(id => contains(homeCards[id], t))
+    pressed = { ...t, action: id ? `detail-${id}` : 'home-scroll', lastY: t.clientY, moved: false }
+    if (id && typeof setTimeout === 'function') {
+      const gesture = pressed
+      longPressTimer = setTimeout(() => {
+        longPressTimer = null
+        if (!active || pressed !== gesture || gesture.moved) return
+        cancelScrollRepaint()
+        sortOrder = gameOrder.slice()
+        sortSelected = id
+        sortWarning = ''
+        // The opening touch only enters the page; a fresh touch picks up a row.
+        pressed.action = 'sort-entry'
+        repaint()
+        try { if (wx.vibrateShort) wx.vibrateShort({ type: 'light' }) } catch (error) {}
+      }, longPressMs)
+    }
   }
   function onMove(e) {
     if (!active || !pressed || detailGame || pickerOpen) return
     const t = (e.touches || e.changedTouches || []).find(touch => touch.identifier === pressed.identifier)
     if (!t) return
     const action = pressed.action
+    if (action === 'sort-drag') { updateSortDrag(t); return }
     if (action !== 'home-scroll' && !action.startsWith('detail-')) return
-    if (Math.abs(t.clientY - pressed.clientY) >= 6) pressed.moved = true
+    if (Math.hypot(t.clientX - pressed.clientX, t.clientY - pressed.clientY) >= 6) {
+      pressed.moved = true
+      cancelLongPress()
+    }
     if (!pressed.moved) return
     const delta = pressed.lastY - t.clientY
     pressed.lastY = t.clientY
@@ -302,12 +357,35 @@ function start({ context: c, screen: initialScreen, openGame }) {
     if (!active || !pressed) return
     const t = e.changedTouches.find(touch => touch.identifier === pressed.identifier)
     if (!t) return
+    cancelLongPress()
     const moved = pressed.moved === true
     const lastY = pressed.lastY
     const tap = !moved && Math.hypot(t.clientX - pressed.clientX, t.clientY - pressed.clientY) < 16
     const action = pressed.action
     const startY = pressed.clientY
     pressed = null
+    if (action === 'sort-entry') return
+    if (action === 'sort-drag') {
+      updateSortDrag(t)
+      sortDrag = null
+      cancelScrollRepaint()
+      repaint()
+      return
+    }
+    if (action === 'sort-cancel' || action === 'sort-done') {
+      if (!tap) return
+      if (action === 'sort-done') {
+        try { wx.setStorageSync(orderSaveKey, sortOrder.slice()) }
+        catch (error) { sortWarning = '保存失败，请重试或取消'; repaint(); return }
+        gameOrder = sortOrder.slice()
+        homeScroll = 0
+      }
+      sortOrder = null
+      sortSelected = null
+      sortWarning = ''
+      repaint()
+      return
+    }
     if (action === 'home-scroll') {
       if (moved) homeScroll = Math.max(0, Math.min(homeScrollMax, homeScroll + (lastY - t.clientY)))
       else if (!tap) homeScroll = Math.max(0, Math.min(homeScrollMax, homeScroll + startY - t.clientY))
@@ -320,6 +398,8 @@ function start({ context: c, screen: initialScreen, openGame }) {
       return
     }
     if (!tap) return
+    if (action === 'detail-textbattle') { detailGame = 'textbattle'; pickerOpen = false; repaint(); return }
+    if (action === 'textbattle-start') { openGame('textbattle'); return }
     if (action === 'detail-driller') { detailGame = 'driller'; pickerOpen = false; repaint(); return }
     if (action === 'driller-start') { openGame('driller', selectedDrillerId); return }
     if (action === 'detail-klotski') { detailGame = 'klotski'; pickerOpen = false; repaint() }
@@ -357,11 +437,23 @@ function start({ context: c, screen: initialScreen, openGame }) {
       loadSelected(); pickerOpen = false; repaint()
     }
   }
-  function cancel() { pressed = null; cancelScrollRepaint() }
+  function cancel() {
+    cancelLongPress()
+    if (sortDrag) sortOrder = sortDrag.originalOrder
+    sortDrag = null
+    pressed = null
+    cancelScrollRepaint()
+  }
+  function onCancel(e) {
+    if (pressed && e && e.changedTouches && !e.changedTouches.some(t => t.identifier === pressed.identifier)) return
+    const dragging = !!sortDrag
+    cancel()
+    if (dragging) repaint()
+  }
   wx.onTouchStart(onStart)
   if (wx.onTouchMove) wx.onTouchMove(onMove)
   wx.onTouchEnd(onEnd)
-  wx.onTouchCancel(cancel)
+  wx.onTouchCancel(onCancel)
   repaint()
   return {
     resize(nextScreen) { cancel(); screen = nextScreen; repaint() },
@@ -371,11 +463,12 @@ function start({ context: c, screen: initialScreen, openGame }) {
       active = false
       cancel()
       art.dispose()
+      textbattleArt.dispose()
       cancelScrollRepaint()
       wx.offTouchStart(onStart)
       if (wx.offTouchMove) wx.offTouchMove(onMove)
       wx.offTouchEnd(onEnd)
-      wx.offTouchCancel(cancel)
+      wx.offTouchCancel(onCancel)
     }
   }
 }

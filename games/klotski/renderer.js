@@ -1,5 +1,6 @@
 const { palette: P, path, box, text, gradient, background, button, headerButton } = require('../../common/canvas.js')
 const { drawLetter } = require('./lettering.js')
+const { dialogLayout } = require('./layout.js')
 
 const finishes = {
   cao: ['#b96545', '#7e4032', '#452822'],
@@ -163,7 +164,8 @@ function drawBoard(c, board, cell, pieces, selected, drag, portraits, omittedPie
 }
 
 function drawDialog(c, layout, type, steps, best, levelName, hasNextLevel) {
-  const { width, height, dialog, cancel, confirm, next } = layout
+  const { width, height } = layout
+  const { dialog, cancel, confirm, next } = dialogLayout(layout, type)
   c.fillStyle = 'rgba(23,26,23,.58)'
   c.fillRect(0, 0, width, height)
   box(c, dialog, '#f4ecdc', 16, '#d9c298')
@@ -178,16 +180,10 @@ function drawDialog(c, layout, type, steps, best, levelName, hasNextLevel) {
       : [`本次完成：${steps} 步`, best ? `个人最佳：${best} 步` : '每一步，都为最后的出路。']
   lines.forEach((line, i) => text(c, line, cx, dialog.y + 105 + i * 21, 12, P.muted, 'center'))
   if (type === 'won') {
-    const gap = 6; const buttonW = (dialog.w - 24 - gap * 2) / 3; const buttonX = dialog.x + 12; const buttonY = dialog.y + 190
-    layout.cancel = { x: buttonX, y: buttonY, w: buttonW, h: 42 }
-    layout.confirm = { x: buttonX + buttonW + gap, y: buttonY, w: buttonW, h: 42 }
-    layout.next = { x: buttonX + (buttonW + gap) * 2, y: buttonY, w: buttonW, h: 42 }
-    layout.nextEnabled = Boolean(hasNextLevel)
     button(c, cancel, '查看棋盘')
-    button(c, confirm, '再来一局', true)
-    button(c, next, '下一关', false, layout.nextEnabled)
+    button(c, confirm, '再来一局')
+    button(c, next, '下一关', true, Boolean(hasNextLevel))
   } else {
-    layout.nextEnabled = false
     button(c, cancel, type === 'rules' ? '返回' : '取消')
     button(c, confirm, type === 'rules' ? '开始解局' : '确认重开', true)
   }

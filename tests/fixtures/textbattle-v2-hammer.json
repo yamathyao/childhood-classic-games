@@ -1,0 +1,87 @@
+{
+  "version": 2,
+  "runId": 8,
+  "rng": 2361540390,
+  "round": 1,
+  "streak": 0,
+  "status": "fighting",
+  "weapon": "hammer",
+  "stance": "guard",
+  "elapsedMs": 2700,
+  "logs": [
+    {
+      "side": "player",
+      "damage": 38,
+      "critical": true,
+      "dodged": false,
+      "time": 901
+    },
+    {
+      "side": "enemy",
+      "damage": 23,
+      "critical": false,
+      "dodged": false,
+      "time": 968
+    },
+    {
+      "side": "player",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 1802
+    },
+    {
+      "side": "enemy",
+      "damage": 23,
+      "critical": false,
+      "dodged": false,
+      "time": 1936
+    }
+  ],
+  "player": {
+    "name": "沈七弦",
+    "base": {
+      "maxHp": 213,
+      "atk": 18,
+      "def": 7,
+      "crit": 17.015681876785017,
+      "dodge": 16.804522970111215,
+      "spd": 1.3056866756205827
+    },
+    "stats": {
+      "maxHp": 213,
+      "atk": 22,
+      "def": 18,
+      "spd": 1.1098336742774952,
+      "crit": 17.015681876785017,
+      "dodge": 20.804522970111215,
+      "pierce": 0.55
+    },
+    "hp": 167,
+    "cooldown": 3.107744458203001
+  },
+  "enemy": {
+    "name": "荒原力士",
+    "kind": "brute",
+    "weapon": "hammer",
+    "base": {
+      "maxHp": 206,
+      "atk": 16,
+      "def": 7,
+      "crit": 21.630588616508994,
+      "dodge": 16.10130655042036,
+      "spd": 1.350728298049028
+    },
+    "stats": {
+      "maxHp": 278,
+      "atk": 27,
+      "def": 5,
+      "spd": 1.0333071480075064,
+      "crit": 21.630588616508994,
+      "dodge": 16.10130655042036,
+      "pierce": 0.55
+    },
+    "hp": 240,
+    "cooldown": 203.29937790985514
+  }
+}

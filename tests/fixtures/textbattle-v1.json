@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "runId": 42,
+  "rng": 1510144494,
+  "round": 1,
+  "streak": 0,
+  "status": "fighting",
+  "weapon": "sword",
+  "stance": "guard",
+  "elapsedMs": 2700,
+  "logs": [
+    {
+      "side": "enemy",
+      "damage": 19,
+      "critical": true,
+      "dodged": false,
+      "time": 508
+    },
+    {
+      "side": "player",
+      "damage": 25,
+      "critical": false,
+      "dodged": false,
+      "time": 990
+    },
+    {
+      "side": "enemy",
+      "damage": 12,
+      "critical": false,
+      "dodged": false,
+      "time": 1017
+    },
+    {
+      "side": "enemy",
+      "damage": 23,
+      "critical": true,
+      "dodged": false,
+      "time": 1525
+    },
+    {
+      "side": "player",
+      "damage": 23,
+      "critical": false,
+      "dodged": false,
+      "time": 1981
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 2034
+    },
+    {
+      "side": "enemy",
+      "damage": 12,
+      "critical": false,
+      "dodged": false,
+      "time": 2542
+    }
+  ],
+  "player": {
+    "name": "沈惊鸿",
+    "base": {
+      "maxHp": 193,
+      "atk": 19,
+      "def": 10,
+      "crit": 16.602768423309755,
+      "dodge": 15.794539443175251,
+      "spd": 1.2314845492963096
+    },
+    "stats": {
+      "maxHp": 193,
+      "atk": 26,
+      "def": 25,
+      "spd": 1.0098173304229738,
+      "crit": 19.602768423309755,
+      "dodge": 19.794539443175253,
+      "pierce": 0
+    },
+    "hp": 127,
+    "cooldown": 270.834337675127
+  },
+  "enemy": {
+    "name": "疾风刺客",
+    "kind": "assassin",
+    "weapon": "dual",
+    "base": {
+      "maxHp": 200,
+      "atk": 19,
+      "def": 10,
+      "crit": 20.759879603897982,
+      "dodge": 12.098801364540051,
+      "spd": 1.221708691210888
+    },
+    "stats": {
+      "maxHp": 170,
+      "atk": 18,
+      "def": 5,
+      "spd": 1.9669509928495295,
+      "crit": 20.759879603897982,
+      "dodge": 24.09880136454005,
+      "pierce": 0
+    },
+    "hp": 122,
+    "cooldown": 350.4064523274053
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "model": "gpt-image-2.5-sunburst",
+  "method": "local image API generation + edit; chroma-key cutout; offline assembly",
+  "prompts": [
+    "art-source/textbattle-sprites-2d.prompt.txt",
+    "art-source/textbattle-sprites-2d-edit.prompt.txt"
+  ],
+  "atlas": "6 columns × 4 rows; 256px tiles",
+  "groups": [
+    "blue-male",
+    "blue-female",
+    "red-male",
+    "red-female"
+  ],
+  "weapons": [
+    "sword",
+    "saber",
+    "spear",
+    "dual",
+    "axe",
+    "halberd"
+  ],
+  "decodedBytes": 6291456
+}

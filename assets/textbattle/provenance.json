@@ -1,0 +1,14 @@
+{
+  "model": "gpt-image-2.5-sunburst",
+  "method": "local configured image API; inspected magenta cutout; offline assembly",
+  "prompt": "art-source/textbattle-sprites.prompt.txt",
+  "atlas": "5 columns × 2 rows; 256px tiles; blue then red",
+  "weapons": [
+    "sword",
+    "saber",
+    "spear",
+    "dual",
+    "hammer"
+  ],
+  "decodedBytes": 2621440
+}

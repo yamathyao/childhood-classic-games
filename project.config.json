@@ -57,6 +57,18 @@
       {
         "type": "file",
         "value": ".gateway.env"
+      },
+      {
+        "type": "file",
+        "value": "assets/textbattle/fighters.png"
+      },
+      {
+        "type": "file",
+        "value": "assets/textbattle/provenance.json"
+      },
+      {
+        "type": "file",
+        "value": "assets/textbattle/provenance-2d.json"
       }
     ],
     "include": []
