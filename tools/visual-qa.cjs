@@ -49,7 +49,8 @@ function browserBoot({ modules, images }) {
     getStorageSync: key => JSON.parse(localStorage.getItem(key) || 'null'),
     setStorageSync: (key, value) => localStorage.setItem(key, JSON.stringify(value))
   }
-  for (const name of ['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize']) {
+  wx.showKeyboard = () => {}; wx.hideKeyboard = () => {}
+  for (const name of ['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize', 'KeyboardConfirm', 'KeyboardComplete']) {
     events[name] = new Set()
     wx['on' + name] = callback => events[name].add(callback)
     wx['off' + name] = callback => events[name].delete(callback)

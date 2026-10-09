@@ -14,7 +14,7 @@ function boot(options = {}) {
   const screen = { width: 375, height: 812, top: 24, bottom: 16, dpr: 2 }
   const texts = []
   const operations = []
-  const c = Object.fromEntries(['fillRect', 'beginPath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo', 'closePath', 'arc', 'fill', 'stroke', 'strokeRect', 'save', 'restore', 'clip', 'drawImage'].map(name => [name, (...args) => operations.push({ name, args })]))
+  const c = Object.fromEntries(['fillRect', 'beginPath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo', 'closePath', 'arc', 'rect', 'fill', 'stroke', 'strokeRect', 'save', 'restore', 'clip', 'translate', 'rotate', 'drawImage'].map(name => [name, (...args) => operations.push({ name, args })]))
   c.scale = (...args) => operations.push({ name: 'scale', args })
   c.createLinearGradient = () => ({ addColorStop() {} })
   c.clearRect = () => { texts.length = 0; operations.length = 0 }
@@ -120,7 +120,7 @@ test('tetris card opens its detail page and routes into an independent scene', (
 test('all collection cards share one size and preview slot, and the list scrolls from a card', () => {
   const screen = { width: 375, height: 812, top: 24, bottom: 16 }
   const view = homeCardLayout(screen)
-  assert.equal(view.cards.length, 4)
+  assert.equal(view.cards.length, 5)
   view.cards.forEach(card => assert.deepEqual([card.w, card.h], [view.cards[0].w, view.cards[0].h]))
   const slots = view.cards.map(card => view.preview(card))
   slots.forEach((rect, index) => {
@@ -213,6 +213,20 @@ test('fourth card scrolls into view, opens driller details and selects a level b
   assert.equal(game.storage.get('driller.currentLevel'), 'arcade-1000')
   game.clickText('进入游戏')
   assert.ok(game.texts.some(item => item.text.includes('向上钻')))
+  assert.equal(game.listeners.TouchStart.size, 1)
+  game.clickText('游戏合集')
+  assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
+  assert.equal(game.listeners.TouchStart.size, 1)
+})
+
+test('fifth collection card opens text battle detail and an independent scene', () => {
+  const game = boot()
+  game.emit('Start', 180, 700); game.emit('Move', 180, 50); game.emit('End', 180, 50)
+  game.clickText('文字对战')
+  assert.ok(game.texts.some(item => item.text.includes('首战选择武器，后续战斗仅调整姿态')))
+  assert.ok(game.texts.some(item => item.text.includes('伤害、受击、暴击与闪避积攒武势')))
+  game.clickText('进入游戏')
+  assert.ok(game.texts.some(item => item.text.includes('开始交战')))
   assert.equal(game.listeners.TouchStart.size, 1)
   game.clickText('游戏合集')
   assert.ok(game.texts.some(item => item.text.includes('童 年 游 戏 馆')))
