@@ -15,6 +15,8 @@ function boot(game, options = {}) {
   const texts = []
   const opened = []
   const metrics = { paints: 0, calls: 0, writes: 0, blits: 0 }
+  const writesByKey = new Map()
+  let recordWriteFailures = options.recordWriteFailures || 0
   let now = 1000
   let nextTimer = 0
   function context(main = false) {
@@ -39,7 +41,9 @@ function boot(game, options = {}) {
     getStorageSync: key => storage.get(key),
     setStorageSync: (key, value) => {
       if (options.failedStorage) throw new Error('Storage unavailable')
+      if (key === 'textbattle.records.v1' && recordWriteFailures > 0) { recordWriteFailures--; throw new Error('Record storage unavailable') }
       metrics.writes++; storage.set(key, structuredClone(value))
+      writesByKey.set(key, (writesByKey.get(key) || 0) + 1)
     },
     createCanvas: () => mainCanvas,
     createOffscreenCanvas: () => {
@@ -108,8 +112,8 @@ function boot(game, options = {}) {
     emit('Start', rect.x + rect.w / 2, rect.y + rect.h / 2)
     emit('End', rect.x + rect.w / 2, rect.y + rect.h / 2)
   }
-  const reset = () => { for (const key of Object.keys(metrics)) metrics[key] = 0 }
-  return { scene, load, screen, timers, listeners, storage, surfaces, images, mainCanvas, metrics, advance, emit, tap, reset, texts, opened }
+  const reset = () => { for (const key of Object.keys(metrics)) metrics[key] = 0; writesByKey.clear() }
+  return { scene, load, screen, timers, listeners, storage, surfaces, images, mainCanvas, metrics, writesByKey, advance, emit, tap, reset, texts, opened }
 }
 
 function assertReleased(game) {
@@ -429,7 +433,7 @@ test('text battle saves victory immediately, advances to full health and keeps o
   assert.equal(game.timers.size, 0)
   game.tap(view.action); game.tap(view.modalPrimary)
   assert.equal(game.storage.get(rules.saveKey).progression.pending, true)
-  game.tap(view.growthCards[0])
+  game.tap(view.growthCards[0]); game.tap(view.growthConfirm)
   const next = game.storage.get(rules.saveKey)
   assert.equal(next.round, 2); assert.equal(next.status, 'prepare')
   assert.equal(next.player.hp, next.player.stats.maxHp)
@@ -478,6 +482,57 @@ test('weapon skills and relationship guide are read-only, pause combat and never
   assertReleased(game)
 })
 
+test('late single-card rewards use their centered touch area, confirm once and leave no scheduler', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const state = rules.initialState(37)
+  for (let round = 1; round < 100; round++) {
+    state.status = 'won'; state.enemy.hp = 0; state.streak = state.round; rules.nextRound(state)
+    const choices = rules.upgradeChoices(state)
+    const chosen = choices.find(c => c.id !== 'atk') || choices[0]
+    if (round < 99) rules.chooseUpgrade(state, chosen.id)
+  }
+  assert.equal(rules.upgradeChoices(state).length, 1)
+  const game = boot('textbattle', { storage: [[rules.saveKey, rules.snapshot(state)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  const before = structuredClone(game.storage.get(rules.saveKey))
+  game.tap(view.growthCards[0]); game.tap(view.growthConfirm)
+  assert.deepEqual(game.storage.get(rules.saveKey), before)
+  game.tap(view.growthCards[1])
+  assert.deepEqual(game.storage.get(rules.saveKey), before)
+  assert.ok(game.texts.some(item => item.text === '已选中 ✓'))
+  game.tap(view.growthConfirm)
+  const after = game.storage.get(rules.saveKey)
+  assert.equal(after.progression.pending, false); assert.equal(after.progression.counts.atk, before.progression.counts.atk + 1)
+  assert.ok(rules.restore(after)); assert.equal(game.timers.size, 0)
+  assertReleased(game)
+})
+test('upgrade selection is a reversible preview; only a separate confirmation applies the latest choice once', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const state = rules.initialState(73)
+  state.status = 'won'; state.enemy.hp = 0; state.streak = 1; rules.nextRound(state)
+  const game = boot('textbattle', { storage: [[rules.saveKey, rules.snapshot(state)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  const before = structuredClone(game.storage.get(rules.saveKey))
+  game.reset(); game.tap(view.growthConfirm)
+  assert.equal(game.metrics.writes, 0)
+  game.tap(view.growthCards[0]); game.tap(view.growthCards[0]); game.tap(view.growthCards[2])
+  assert.deepEqual(game.storage.get(rules.saveKey), before)
+  assert.equal(game.metrics.writes, 0); assert.equal(game.timers.size, 0)
+  assert.ok(game.texts.some(item => item.text === '已选中 ✓'))
+  game.scene.hide(); game.scene.show(); game.scene.resize(game.screen)
+  assert.deepEqual(game.storage.get(rules.saveKey), before)
+  const chosen = rules.upgradeChoices(before)[2]
+  const expected = rules.upgradePreview(before, chosen.id)
+  game.tap(view.growthConfirm)
+  const after = structuredClone(game.storage.get(rules.saveKey))
+  assert.deepEqual(after.player.stats, expected)
+  assert.equal(after.progression.pending, false); assert.equal(after.progression.counts[chosen.id], 1)
+  assert.equal(after.rng, before.rng)
+  game.reset(); game.tap(view.growthConfirm)
+  assert.deepEqual(game.storage.get(rules.saveKey), after); assert.equal(game.metrics.writes, 0)
+  assertReleased(game)
+})
+
 test('pending growth survives hide, exit and reload, blocks controls and can be claimed only once', () => {
   const rules = require('../games/textbattle/rules.js')
   const state = rules.initialState(73)
@@ -493,13 +548,15 @@ test('pending growth survives hide, exit and reload, blocks controls and can be 
   game.tap(view.growthRestart); game.tap(view.modalSecondary)
   assert.ok(game.texts.some(item => item.text === '胜战修行'))
   assert.deepEqual(game.storage.get(rules.saveKey), original)
-  game.tap(view.growthHome)
+  game.tap(view.growthCards[1]); game.tap(view.growthHome)
   assert.equal(game.timers.size, 0)
   const saved = structuredClone(game.storage.get(rules.saveKey))
   const resumed = boot('textbattle', { storage: [[rules.saveKey, saved]] })
   assert.ok(resumed.texts.some(item => item.text === '胜战修行'))
   const id = rules.upgradeChoices(saved)[0].id
-  resumed.tap(view.growthCards[0])
+  resumed.tap(view.growthConfirm)
+  assert.deepEqual(resumed.storage.get(rules.saveKey), saved) // Preview selection is not persisted or implicitly claimed.
+  resumed.tap(view.growthCards[0]); resumed.tap(view.growthConfirm)
   const after = resumed.storage.get(rules.saveKey)
   assert.equal(after.progression.counts[id], 1); assert.equal(after.progression.pending, false)
   resumed.tap(view.growthCards[0]) // Repeat touch cannot collect the reward again.
@@ -536,6 +593,58 @@ test('combat animations repaint local regions, keep one scheduler, and sleep bet
   assert.equal(actual.rng, expected.rng)
   assert.equal(actual.player.combat.momentum, expected.player.combat.momentum)
   assert.equal(game.timers.size, 0)
+  assertReleased(game)
+})
+
+test('normal attacks update combat regions without rebuilding static controls or rewriting unchanged records', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const initial = rules.initialState(3); rules.startFight(initial)
+  const game = boot('textbattle', { storage: [[rules.saveKey, rules.snapshot(initial)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  game.tap(view.modalPrimary); game.reset(); game.advance(5000)
+  assert.equal(game.metrics.paints, 0, 'Ordinary attacks must not clear the full canvas')
+  assert.ok(game.writesByKey.get(rules.saveKey) > 0, 'Combat still autosaves')
+  assert.equal(game.writesByKey.get(rules.bestKey) || 0, 0, 'Records remain unchanged during combat')
+  game.scene.hide()
+  const actual = game.storage.get(rules.saveKey)
+  const expected = rules.snapshot(initial); rules.tick(expected, 5000)
+  for (const side of ['player', 'enemy']) {
+    assert.ok(Math.abs(actual[side].cooldown - expected[side].cooldown) < 1e-7)
+    expected[side].cooldown = actual[side].cooldown
+  }
+  assert.deepEqual(actual, expected, 'Rendering optimization cannot change combat or RNG')
+  assertReleased(game)
+})
+
+test('unchanged records are not rewritten and failed victory record writes retry on the next save', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const initial = rules.initialState(10); rules.startFight(initial)
+  initial.enemy.hp = 1; initial.player.cooldown = 0
+  const game = boot('textbattle', { recordWriteFailures: 1, storage: [[rules.saveKey, rules.snapshot(initial)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  game.tap(view.modalPrimary); game.advance(1)
+  assert.equal(game.storage.get(rules.saveKey).status, 'won')
+  assert.equal(game.storage.has(rules.bestKey), false)
+  assert.ok(game.texts.some(item => item.text.includes('存档失败')))
+  game.scene.hide()
+  assert.equal(game.storage.get(rules.bestKey)[0].streak, 1)
+  assert.equal(game.writesByKey.get(rules.bestKey), 1)
+  game.reset(); game.scene.show(); game.scene.hide()
+  assert.equal(game.writesByKey.get(rules.bestKey) || 0, 0)
+  assertReleased(game)
+})
+
+test('settled momentum strips stop drawing while hit labels continue animating', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const initial = rules.initialState(3); rules.startFight(initial); initial.player.cooldown = 10
+  const game = boot('textbattle', { storage: [[rules.saveKey, rules.snapshot(initial)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  game.tap(view.modalPrimary); game.advance(400)
+  const before = game.texts.length
+  game.reset(); game.advance(150)
+  assert.ok(game.metrics.calls > 0, 'Hit labels are still animated')
+  assert.ok(!game.texts.slice(before).some(item => item.text.startsWith('武势 ')), 'Settled meters must not be repainted')
+  assert.equal(game.metrics.paints, 0); assert.equal(game.metrics.writes, 0)
   assertReleased(game)
 })
 
@@ -786,6 +895,41 @@ test('fighter atlas loading or texture upload failure falls back to playable vec
     assert.ok(game.storage.get('textbattle.v5').elapsedMs > 0)
     assertReleased(game)
   }
+})
+
+test('quality atlas loads lazily once, owned badges are read-only and late image callbacks cannot repaint', () => {
+  const rules = require('../games/textbattle/rules.js')
+  const state = rules.initialState(29)
+  for (let i = 0; i < 2; i++) {
+    state.status = 'won'; state.enemy.hp = 0; state.streak = state.round; rules.nextRound(state)
+    if (i === 0) rules.chooseUpgrade(state, rules.upgradeChoices(state)[0].id)
+  }
+  const game = boot('textbattle', { images: true, storage: [[rules.saveKey, rules.snapshot(state)]] })
+  const view = game.load('games/textbattle/layout.js').layout(game.screen)
+  assert.equal(game.images.length, 2)
+  const atlas = game.images[1]
+  assert.equal(atlas.src, 'assets/textbattle/upgrade-icons.png')
+  atlas.width = 768; atlas.height = 512
+  game.reset(); atlas.onload()
+  assert.equal(game.metrics.paints, 1); assert.equal(game.metrics.blits, 4)
+  assert.equal(atlas.onload, null); assert.equal(atlas.onerror, null)
+  const before = structuredClone(game.storage.get(rules.saveKey))
+  game.reset(); game.tap(view.growthOwned[0])
+  assert.deepEqual(game.storage.get(rules.saveKey), before)
+  assert.ok(game.texts.some(item => /普通\d+ \/ 精良\d+/.test(item.text)))
+  assert.ok(game.texts.some(item => /史诗\d+ \/ 传说\d+/.test(item.text)))
+  assert.equal(game.images.length, 2); assert.equal(game.metrics.writes, 0)
+  game.reset(); game.advance(5000)
+  assert.equal(game.metrics.paints, 0); assert.equal(game.timers.size, 0)
+  assertReleased(game)
+  const pending = boot('textbattle', { images: true, storage: [[rules.saveKey, rules.snapshot(state)]] })
+  const late = pending.images[1].onload
+  assertReleased(pending); pending.reset(); late()
+  assert.equal(pending.metrics.paints, 0); assert.equal(pending.images[1].onload, null)
+  const failed = boot('textbattle', { images: true, failedBlit: true, storage: [[rules.saveKey, rules.snapshot(state)]] })
+  failed.images[1].width = 768; failed.images[1].height = 512; failed.images[1].onload()
+  failed.tap(view.growthCards[0]); failed.tap(view.growthConfirm); assert.equal(failed.storage.get(rules.saveKey).progression.pending, false)
+  assertReleased(failed)
 })
 
 test('sokoban waits without redraws or timers and still records playing time', context => {

@@ -34,7 +34,7 @@ function layout({ width, height, top = 0, bottom = 0 }) {
   const dialog = { x: margin, y: (height - 370) / 2, w, h: 370 }
   const guideHeight = Math.min(480, height - top - bottom - 24)
   const guideDialog = { x: margin, y: top + (height - top - bottom - guideHeight) / 2, w, h: guideHeight }
-  const growthDialog = { x: margin, y: top + (height - top - bottom - 420) / 2, w, h: 420 }
+  const growthDialog = { x: margin, y: top + (height - top - bottom - 480) / 2, w, h: 480 }
   const modalButton = (index, total = 2) => ({ x: dialog.x + 16 + index * (dialog.w - 24) / total,
     y: dialog.y + dialog.h - 60, w: (dialog.w - 32 - (total - 1) * 8) / total, h: 44 })
   return { width, height, top, bottom, arena, attributes, weapons, stances, action, log, dialog,
@@ -49,13 +49,18 @@ function layout({ width, height, top = 0, bottom = 0 }) {
     reroll: { x: width - 84, y: top + 45, w: 66, h: 30 },
     tactics: { x: width - 110, y: weaponY - 22, w: 92, h: 20 },
     guideDialog, growthDialog,
-    growthCards: Array.from({ length: 3 }, (_, index) => ({ x: margin + 14, y: growthDialog.y + 88 + index * 92, w: w - 28, h: 80 })),
-    growthHome: { x: margin + 14, y: growthDialog.y + 368, w: (w - 36) / 2, h: 36 },
-    growthRestart: { x: margin + 22 + (w - 36) / 2, y: growthDialog.y + 368, w: (w - 36) / 2, h: 36 },
+    growthCards: Array.from({ length: 3 }, (_, index) => ({ x: margin + 14, y: growthDialog.y + 90 + index * 82, w: w - 28, h: 74 })),
+    growthOwned: Array.from({ length: 6 }, (_, index) => ({ x: margin + 14 + index * (w - 28) / 6, y: growthDialog.y + 356, w: (w - 28) / 6 - 4, h: 42 })),
+    growthHome: { x: margin + 14, y: growthDialog.y + 434, w: (w - 40) * .25, h: 32 },
+    growthRestart: { x: margin + 20 + (w - 40) * .25, y: growthDialog.y + 434, w: (w - 40) * .3, h: 32 },
+    growthConfirm: { x: margin + 26 + (w - 40) * .55, y: growthDialog.y + 434, w: (w - 40) * .45, h: 32 },
     guideTabs: Array.from({ length: 4 }, (_, index) => ({ x: guideDialog.x + 12 + index * (w - 18) / 4,
       y: guideDialog.y + 54, w: (w - 42) / 4, h: 30 })),
     guidePrimary: { ...modalButton(1), y: guideDialog.y + guideDialog.h - 56 },
     guideSecondary: { ...modalButton(0), y: guideDialog.y + guideDialog.h - 56 },
     modalPrimary: modalButton(1), modalSecondary: modalButton(0) }
 }
-module.exports = { layout, attributePanels, nameControls }
+function growthCardRects(view, count) {
+  return view.growthCards.slice(0, count).map(rect => ({ ...rect, y: rect.y + (3 - count) * 41 }))
+}
+module.exports = { layout, attributePanels, nameControls, growthCardRects }

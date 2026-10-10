@@ -21,10 +21,14 @@ function strike(state, side) {
 function oldBattle(version = 4, combatVersion = 3) {
   const state = rules.initialState(10)
   state.version = version; state.combatVersion = combatVersion
+  const fixture = require('./fixtures/textbattle-v5-original-agile.json')
+  for (const side of ['player', 'enemy']) state[side].base = { ...fixture[side].base }
   delete state.progression
   if (combatVersion === 2) state.skill = 'renew'
   state.status = 'fighting'; state.enemy.kind = 'brute'; state.enemy.name = '荒原力士'; state.enemy.weapon = 'axe'
-  state.enemy.stats = rules.stats(state.enemy.base, 'axe', 'strong', 'brute', state.round)
+  state.player.stats = rules.stats(state.player.base, state.weapon, state.stance, null, state.round, undefined, undefined, combatVersion)
+  state.player.hp = state.player.stats.maxHp; state.player.cooldown = 1000 / state.player.stats.spd
+  state.enemy.stats = rules.stats(state.enemy.base, 'axe', 'strong', 'brute', state.round, undefined, undefined, combatVersion)
   state.enemy.hp = state.enemy.stats.maxHp; state.enemy.cooldown = 1000 / state.enemy.stats.spd
   return state
 }
@@ -37,7 +41,7 @@ test('weapon ring has exactly one counter and one nemesis per weapon, with no re
       const match = rules.relation(weapon.id, enemy.id)
       if (expected[weapon.id] === enemy.id) {
         wins++; assert.equal(match.counter, true); assert.equal(match.disadvantaged, false)
-        assert.equal(match.name, '专属克制'); assert.equal(match.symbol, '→'); assert.equal(match.scale, 1.18)
+        assert.equal(match.name, '专属克制'); assert.equal(match.symbol, '→'); assert.equal(match.scale, 1.1)
       } else if (expected[enemy.id] === weapon.id) {
         losses++; assert.equal(match.counter, false); assert.equal(match.disadvantaged, true)
         assert.equal(match.name, '被克制'); assert.equal(match.symbol, '←'); assert.equal(match.scale, 1)
@@ -55,12 +59,12 @@ test('actual damage follows weapon matchups symmetrically without occupational m
     const state = duel(enemy.id, weapon.id)
     const target = side === 'player' ? 'enemy' : 'player'
     state[target].stats.dodge = 0; state[side].stats.crit = 0
-    const classic = rules.snapshot(state); classic.combatVersion = 1
-    const base = strike(classic, side); const actual = strike(state, side)
+    const attack = state[side].stats.atk
+    const armor = state[target].stats.def
+    const actual = strike(state, side)
     const match = rules.relation(side === 'player' ? weapon.id : enemy.id, side === 'player' ? enemy.id : weapon.id)
     assert.equal(actual.counter, match.counter); assert.equal(actual.guarded, false); assert.equal(actual.trait, undefined)
-    assert.ok(Math.abs(actual.damage - base.damage * match.scale) <= 1, `${weapon.id}/${enemy.id}/${side}`)
-    assert.deepEqual(state[side].stats, classic[side].stats)
+    assert.equal(actual.damage, Math.max(1, Math.round(attack * match.scale - armor)), `${weapon.id}/${enemy.id}/${side}`)
   }
 })
 
@@ -231,7 +235,15 @@ test('new saves validate momentum ranges, preserve fractional charge and reset b
 
 test('saved third-hit battles resume unchanged and adopt momentum only when entering a new battle', () => {
   const old = duel('spear', 'sword'); old.combatVersion = 4
-  for (const actor of [old.player, old.enemy]) delete actor.combat.momentum
+  old.progression.version = 4
+  const fixture = require('./fixtures/textbattle-v5-original-agile.json')
+  for (const side of ['player', 'enemy']) {
+    const actor = old[side]; delete actor.combat.momentum
+    actor.base = { ...fixture[side].base }
+    actor.stats = rules.stats(actor.base, side === 'player' ? old.weapon : actor.weapon,
+      side === 'player' ? old.stance : 'strong', side === 'enemy', old.round, undefined, old.progression, 4)
+    actor.hp = actor.stats.maxHp; actor.cooldown = 1000 / actor.stats.spd
+  }
   old.player.combat.attacks = 2
   const stored = rules.snapshot(old)
   const restored = rules.restore(stored)
@@ -242,7 +254,7 @@ test('saved third-hit battles resume unchanged and adopt momentum only when ente
   assert.deepEqual(rules.restore(rules.snapshot(restored)), restored)
   restored.status = 'won'; restored.enemy.hp = 0; restored.streak = 1
   rules.nextRound(restored)
-  assert.equal(restored.combatVersion, 5); assert.equal(restored.player.combat.momentum, 0)
+  assert.equal(restored.combatVersion, 10); assert.equal(restored.player.combat.momentum, 0)
   const prepared = rules.snapshot(stored); prepared.status = 'prepare'
   const migrated = rules.restore(prepared)
   assert.ok(migrated); assert.equal(migrated.combatVersion, 5)
@@ -254,7 +266,8 @@ test('balanced momentum keeps all six weapons near two skills per equal-base bat
   const results = require('../tools/verify-textbattle.cjs').verify(40)
   for (const result of results) {
     assert.ok(result.skillsPerBattle >= 1.4 && result.skillsPerBattle <= 2.4, result.weapon)
-    assert.ok(result.secondsToFirstSkill >= 3 && result.secondsToFirstSkill <= 5, result.weapon)
+    // Lower starting attack speed delays the first release, without reducing charges per battle.
+    assert.ok(result.secondsToFirstSkill >= 5 && result.secondsToFirstSkill <= 7, result.weapon)
     assert.ok(result.battlesWithSkillPercent >= 95, result.weapon)
     assert.ok(result.winPercent > 30 && result.winPercent < 70, result.weapon)
   }
@@ -274,18 +287,20 @@ test('charged sword point is guaranteed to hit after missed attempts on either s
   }
 })
 
-test('saber and dual skills apply their advertised damage to a single resolved attack', () => {
+test('saber and dual skills increase attack before subtracting armor in a single resolved hit', () => {
   for (const [weapon, scale] of [['saber', 1.45], ['dual', 1.35]]) for (const side of ['player', 'enemy']) {
     const state = duel(weapon, weapon); const target = side === 'player' ? 'enemy' : 'player'
     state[side].combat.attacks = 2; state[side].combat.momentum = rules.momentum.max; state[target].stats.dodge = 0; state[side].stats.crit = 0
     const normal = rules.snapshot(state); normal[side].combat.momentum = 0
     const base = strike(normal, side); const special = strike(state, side)
-    assert.ok(Math.abs(special.damage - base.damage * scale) <= 1)
+    const attack = state[side].stats.atk; const defense = state[target].stats.def
+    assert.equal(base.damage, Math.max(1, Math.round(attack - defense)))
+    assert.equal(special.damage, Math.max(1, Math.round(attack * scale - defense)))
     assert.equal(state.logs.length, 1); assert.equal(state[side].combat.attacks, 3)
   }
 })
 
-test('spear and axe skills bypass defense; spear skill halves dodge without extra matchup precision', () => {
+test('spear and axe skills bypass defense only on release and retain the normal dodge chance', () => {
   for (const weapon of ['spear', 'axe']) for (const side of ['player', 'enemy']) {
     const state = duel(weapon, weapon); const target = side === 'player' ? 'enemy' : 'player'
     state[side].combat.attacks = 2; state[side].combat.momentum = rules.momentum.max; state[target].stats.dodge = 0; state[side].stats.crit = 0
@@ -297,7 +312,8 @@ test('spear and axe skills bypass defense; spear skill halves dodge without extr
   const state = duel('saber', 'spear')
   state.player.combat.momentum = rules.momentum.max; state.rng = 5000; state.enemy.stats.dodge = 45
   const normal = rules.snapshot(state); normal.player.combat.momentum = 0
-  assert.equal(strike(normal, 'player').dodged, true); assert.equal(strike(state, 'player').dodged, false)
+  assert.equal(strike(normal, 'player').dodged, true); assert.equal(strike(state, 'player').dodged, true)
+  assert.equal(state.player.combat.momentum, 0)
 })
 
 test('halberd wards work for both sides, do not heal or stack, and only spend on a landed opposing hit', () => {
@@ -350,14 +366,14 @@ test('v3 and v4 live battles retain exact combat, migrate display names, and nex
     assert.deepEqual(restored.player, control.player); assert.equal(restored.enemy.hp, control.enemy.hp)
     assert.deepEqual(rules.restore(rules.snapshot(restored)), restored)
     restored.enemy.hp = 0; restored.status = 'won'; restored.streak = 1
-    assert.equal(rules.nextRound(restored), true); assert.equal(restored.combatVersion, 5)
+    assert.equal(rules.nextRound(restored), true); assert.equal(restored.combatVersion, 10)
     assert.equal(restored.enemy.kind, undefined); assert.equal(restored.skill, undefined)
     assert.ok(rules.restore(rules.snapshot(restored)))
     const prepared = rules.snapshot(unchanged); prepared.status = 'prepare'
     const migrated = rules.restore(prepared); assert.ok(migrated)
     assert.equal(migrated.combatVersion, 5); assert.equal(migrated.enemy.kind, undefined)
     assert.equal(migrated.enemy.weapon, prepared.enemy.weapon); assert.equal(migrated.skill, undefined)
-    assert.deepEqual(migrated.enemy.stats, rules.stats(prepared.enemy.base, prepared.enemy.weapon, 'strong', true, prepared.round))
+    assert.deepEqual(migrated.enemy.stats, rules.stats(prepared.enemy.base, prepared.enemy.weapon, 'strong', true, prepared.round, undefined, undefined, 5))
     assert.equal(migrated.enemy.hp, migrated.enemy.stats.maxHp); assert.equal(migrated.rng, prepared.rng)
     assert.deepEqual(migrated.player.combat, { attacks: 0, hitsTaken: 0, ward: false, momentum: 0 })
     assert.equal(old.version, version); assert.equal(old.enemy.name, '荒原力士')
@@ -375,14 +391,14 @@ test('v1 and v2 saves retain battle progress and RNG; next round activates weapo
     assert.equal(state.player.combat.attacks, 0)
     state.enemy.hp = 1; state.enemy.stats.dodge = 0; state.player.cooldown = 0; state.enemy.cooldown = 1000
     rules.tick(state, 1); assert.equal(state.status, 'won')
-    assert.equal(rules.nextRound(state), true); assert.equal(state.combatVersion, 5)
+    assert.equal(rules.nextRound(state), true); assert.equal(state.combatVersion, 10)
     assert.equal(state.enemy.kind, undefined); assert.deepEqual(legacy, oldCopy)
   }
 })
 
 test('new saves reject professions, unrecognized names, mismatched weapon skills, traits and malformed combat', () => {
   const state = duel('dual', 'sword'); rules.tick(state, 4500)
-  for (const mutate of [save => { save.skill = 'missing' }, save => { save.combatVersion = 10 },
+  for (const mutate of [save => { save.skill = 'missing' }, save => { save.combatVersion = 11 },
     save => { save.enemy.kind = 'brute' }, save => { save.enemy.name = 'unknown' },
     save => { save.player.combat.ward = 3 }, save => { save.player.combat.attacks = -1 },
     save => { save.enemy.combat.hitsTaken = 1.5 }, save => { delete save.enemy.combat },

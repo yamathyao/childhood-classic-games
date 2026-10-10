@@ -1,0 +1,217 @@
+{
+  "version": 5,
+  "combatVersion": 6,
+  "runId": 79,
+  "rng": 1919255378,
+  "round": 8,
+  "streak": 7,
+  "status": "fighting",
+  "weapon": "saber",
+  "stance": "guard",
+  "elapsedMs": 4500,
+  "logs": [
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 891,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 19,
+      "critical": false,
+      "dodged": false,
+      "time": 992,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 21,
+      "critical": false,
+      "dodged": false,
+      "time": 1783,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 31,
+      "critical": true,
+      "dodged": false,
+      "time": 1985,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 38,
+      "critical": true,
+      "dodged": false,
+      "time": 2674,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 20,
+      "critical": false,
+      "dodged": false,
+      "time": 2977,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 3565,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 18,
+      "critical": false,
+      "dodged": false,
+      "time": 3969,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 22,
+      "critical": false,
+      "dodged": false,
+      "time": 4457,
+      "counter": true,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 3,
+    "counts": {
+      "atk": 0,
+      "hp": 3,
+      "def": 2,
+      "spd": 1,
+      "crit": 0,
+      "dodge": 1
+    },
+    "qualities": {
+      "normal": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 1,
+        "crit": 0,
+        "dodge": 1
+      },
+      "fine": {
+        "atk": 0,
+        "hp": 1,
+        "def": 2,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "epic": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "legendary": {
+        "atk": 0,
+        "hp": 0,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      }
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 88,
+      "criticals": 1,
+      "dodges": 2,
+      "skills": 0,
+      "attacks": 4
+    },
+    "enemy": {
+      "damage": 81,
+      "criticals": 1,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 5
+    }
+  },
+  "player": {
+    "name": "沈雪渡",
+    "gender": "male",
+    "base": {
+      "maxHp": 220,
+      "atk": 17,
+      "def": 8,
+      "crit": 20.347894163980424,
+      "dodge": 16.098994807159727,
+      "spd": 1.1816531087653068
+    },
+    "stats": {
+      "maxHp": 274,
+      "atk": 22,
+      "def": 29,
+      "spd": 1.0077137711550537,
+      "crit": 28.347894163980424,
+      "dodge": 23.098994807159727,
+      "pierce": 0
+    },
+    "hp": 193,
+    "cooldown": 461.7263781846898,
+    "combat": {
+      "attacks": 4,
+      "hitsTaken": 3,
+      "ward": false,
+      "momentum": 10000
+    }
+  },
+  "enemy": {
+    "name": "西门吹鳕",
+    "gender": "male",
+    "weapon": "spear",
+    "base": {
+      "maxHp": 216,
+      "atk": 18,
+      "def": 10,
+      "crit": 16.359430652036224,
+      "dodge": 15.68759344120932,
+      "spd": 1.144777245075917
+    },
+    "stats": {
+      "maxHp": 248,
+      "atk": 29,
+      "def": 8,
+      "spd": 1.1218817001743986,
+      "crit": 19.359430652036224,
+      "dodge": 15.68759344120932,
+      "pierce": 0.2
+    },
+    "hp": 160,
+    "cooldown": 848.1574742392969,
+    "combat": {
+      "attacks": 5,
+      "hitsTaken": 4,
+      "ward": false,
+      "momentum": 9233
+    }
+  }
+}

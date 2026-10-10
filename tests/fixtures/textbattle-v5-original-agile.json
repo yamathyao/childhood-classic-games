@@ -1,0 +1,129 @@
+{
+  "version": 5,
+  "combatVersion": 5,
+  "runId": 34,
+  "rng": 1137730093,
+  "round": 8,
+  "streak": 7,
+  "status": "fighting",
+  "weapon": "saber",
+  "stance": "agile",
+  "elapsedMs": 1500,
+  "logs": [
+    {
+      "side": "enemy",
+      "damage": 33,
+      "critical": true,
+      "dodged": false,
+      "time": 726,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 22,
+      "critical": false,
+      "dodged": false,
+      "time": 862,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 1453,
+      "counter": false,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 1,
+    "counts": {
+      "atk": 0,
+      "hp": 1,
+      "def": 3,
+      "spd": 0,
+      "crit": 0,
+      "dodge": 3
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 22,
+      "criticals": 0,
+      "dodges": 1,
+      "skills": 0,
+      "attacks": 1
+    },
+    "enemy": {
+      "damage": 33,
+      "criticals": 1,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 2
+    }
+  },
+  "player": {
+    "name": "沈岚歌",
+    "gender": "male",
+    "base": {
+      "maxHp": 222,
+      "atk": 18,
+      "def": 11,
+      "crit": 15.463917380295467,
+      "dodge": 12.000575807898711,
+      "spd": 1.1992505984419999
+    },
+    "stats": {
+      "maxHp": 234,
+      "atk": 23,
+      "def": 15,
+      "spd": 1.160394879052479,
+      "crit": 23.463917380295467,
+      "dodge": 29.000575807898713,
+      "pierce": 0
+    },
+    "hp": 201,
+    "cooldown": 223.55121183669917,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 1,
+      "ward": false,
+      "momentum": 3988
+    }
+  },
+  "enemy": {
+    "name": "胡铁桦",
+    "gender": "male",
+    "weapon": "sword",
+    "base": {
+      "maxHp": 195,
+      "atk": 18,
+      "def": 10,
+      "crit": 19.59716250645334,
+      "dodge": 14.931680156034977,
+      "spd": 1.2516678123518812
+    },
+    "stats": {
+      "maxHp": 215,
+      "atk": 25,
+      "def": 8,
+      "spd": 1.3768345935870694,
+      "crit": 24.59716250645334,
+      "dodge": 14.931680156034977,
+      "pierce": 0
+    },
+    "hp": 193,
+    "cooldown": 678.9109701144965,
+    "combat": {
+      "attacks": 2,
+      "hitsTaken": 1,
+      "ward": false,
+      "momentum": 3982
+    }
+  }
+}

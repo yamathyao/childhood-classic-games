@@ -1,0 +1,12 @@
+Create a production-ready 2D game icon sprite sheet for a restrained wuxia dueling mobile game. Exactly SIX isolated icons on a perfectly flat pure black (#000000) background, laid out in a strict 3-column by 2-row equal-cell grid, image 1536 x 1024. No text, labels, numbers, frames, borders, grids, shadows outside the silhouette, or additional objects. Each of the six 512x512 cells contains one centered icon entirely within its middle 320x320 square, with generous identical black padding and equal visual weight.
+
+Row 1, left to right:
+1. ATTACK: a single elegant straight Chinese sword pointing diagonally upward, strong crisp silhouette, subtle bevel on blade, short crossguard and wrapped hilt. No trails.
+2. VITALITY: a stylized heart with a single simple inner energy droplet cutout, clear friendly shape.
+3. DEFENSE: a symmetrical broad shield, pointed bottom, a single central raised ridge, readable silhouette.
+Row 2, left to right:
+4. ATTACK SPEED: a light martial boot angled forward with exactly two short parallel motion strokes, simple silhouette.
+5. CRITICAL STRIKE: one strong four-point sharp star with a tiny central diamond, striking but restrained.
+6. DODGE: a curved light feather with three large well-separated barbs and a sweeping central shaft.
+
+All six icons are monochrome pearl silver / ivory on black, with strong matte highlights and subtle engraved relief, refined flat 2D illustrations, NOT 3D renders, NOT pixel art. Thick readable shapes suitable for 24px game UI. Identical material treatment, identical lighting and scale. No colored pixels, no soft glow, no blur, no smoke, no scenery, no decorative background. Keep all empty areas truly pure black so they can be removed to transparent alpha. The sword is a universal attack emblem and does not imply equipped weapon. Integrate naturally with a dark navy and warm gold mobile game interface.

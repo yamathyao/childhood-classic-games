@@ -1,0 +1,154 @@
+{
+  "version": 5,
+  "combatVersion": 6,
+  "runId": 79,
+  "rng": 2652401164,
+  "round": 8,
+  "streak": 7,
+  "status": "fighting",
+  "weapon": "saber",
+  "stance": "guard",
+  "elapsedMs": 1500,
+  "logs": [
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 891,
+      "counter": true,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 19,
+      "critical": false,
+      "dodged": false,
+      "time": 992,
+      "counter": false,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 3,
+    "counts": {
+      "atk": 0,
+      "hp": 3,
+      "def": 2,
+      "spd": 1,
+      "crit": 0,
+      "dodge": 1
+    },
+    "qualities": {
+      "normal": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 1,
+        "crit": 0,
+        "dodge": 1
+      },
+      "fine": {
+        "atk": 0,
+        "hp": 1,
+        "def": 2,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "epic": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "legendary": {
+        "atk": 0,
+        "hp": 0,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      }
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 19,
+      "criticals": 0,
+      "dodges": 1,
+      "skills": 0,
+      "attacks": 1
+    },
+    "enemy": {
+      "damage": 0,
+      "criticals": 0,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 1
+    }
+  },
+  "player": {
+    "name": "沈雪渡",
+    "gender": "male",
+    "base": {
+      "maxHp": 220,
+      "atk": 17,
+      "def": 8,
+      "crit": 20.347894163980424,
+      "dodge": 16.098994807159727,
+      "spd": 1.1816531087653068
+    },
+    "stats": {
+      "maxHp": 274,
+      "atk": 22,
+      "def": 29,
+      "spd": 1.0077137711550537,
+      "crit": 28.347894163980424,
+      "dodge": 23.098994807159727,
+      "pierce": 0
+    },
+    "hp": 274,
+    "cooldown": 484.69055127387605,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 0,
+      "ward": false,
+      "momentum": 2026
+    }
+  },
+  "enemy": {
+    "name": "西门吹鳕",
+    "gender": "male",
+    "weapon": "spear",
+    "base": {
+      "maxHp": 216,
+      "atk": 18,
+      "def": 10,
+      "crit": 16.359430652036224,
+      "dodge": 15.68759344120932,
+      "spd": 1.144777245075917
+    },
+    "stats": {
+      "maxHp": 248,
+      "atk": 29,
+      "def": 8,
+      "spd": 1.1218817001743986,
+      "crit": 19.359430652036224,
+      "dodge": 15.68759344120932,
+      "pierce": 0.2
+    },
+    "hp": 229,
+    "cooldown": 282.71915807976575,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 1,
+      "ward": false,
+      "momentum": 843
+    }
+  }
+}

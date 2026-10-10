@@ -1,15 +1,15 @@
 const { contains } = require('../../common/canvas.js')
 const rules = require('./rules.js')
-const { layout, nameControls } = require('./layout.js')
+const { layout, nameControls, growthCardRects } = require('./layout.js')
 const { draw, drawCombatFrame } = require('./renderer.js')
 const { loadSprites } = require('./art.js')
+const { loadUpgradeIcons } = require('./upgrade-art.js')
 const { createFeedback, recordEvents, isAnimating } = require('./feedback.js')
 
 function start({ context, screen: initialScreen, goHome }) {
   let screen = initialScreen; let view = layout(screen)
   const newState = () => rules.initialState((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0)
-  let state = newState(); let records = []
-  state = rules.loadProgress(key => wx.getStorageSync(key)) || state
+  let state = rules.loadProgress(key => wx.getStorageSync(key)) || newState(); let records = []
   try {
     const stored = wx.getStorageSync(rules.bestKey)
     if (Array.isArray(stored)) records = stored.filter(item => item && Number.isInteger(item.runId) &&
@@ -28,29 +28,42 @@ function start({ context, screen: initialScreen, goHome }) {
   const pendingUpgrade = () => state.progression && state.progression.pending
   let modal = pendingUpgrade() ? 'growth' : state.status === 'fighting' ? 'pause' : ['won', 'lost'].includes(state.status) ? 'result' : null
   let timer = null; let lastTick = null; let resultAt = null; let saveFailed = false; let lastSaved = 0; let logOffset = 0; let reviewing = false
+  let recordsDirty = false; let paintedSaveFailed = false
   let feedback = createFeedback(state, Date.now())
   const art = loadSprites(paint)
+  const upgradeArt = loadUpgradeIcons(paint)
+  let selectedUpgrade = null
+  let pendingChoice = null
   function clearFeedback() { feedback = createFeedback(state, Date.now()) }
   function remember() {
     if (state.streak <= 0) return
     const previous = records.find(item => item.runId === state.runId)
-    if (previous) { previous.streak = Math.max(previous.streak, state.streak); previous.name = state.player.name }
-    else records.push({ runId: state.runId, name: state.player.name, streak: state.streak })
+    if (previous) {
+      if (previous.streak >= state.streak && previous.name === state.player.name) return
+      previous.streak = Math.max(previous.streak, state.streak); previous.name = state.player.name
+    } else {
+      if (records.length === 20 && state.streak <= records[19].streak) return
+      records.push({ runId: state.runId, name: state.player.name, streak: state.streak })
+    }
+    recordsDirty = true
     records.sort((a, b) => b.streak - a.streak); records = records.slice(0, 20)
   }
   function persist() {
     remember()
     try {
-      wx.setStorageSync(rules.saveKey, rules.snapshot(state)); wx.setStorageSync(rules.bestKey, records)
+      wx.setStorageSync(rules.saveKey, rules.snapshot(state))
+      if (recordsDirty) { wx.setStorageSync(rules.bestKey, records); recordsDirty = false }
       saveFailed = false
     } catch (error) { saveFailed = true }
     lastSaved = Date.now()
   }
-  function paint(animationOnly = false) {
+  function paint(region) {
     if (!active || hidden) return
-    const options = { modal, best: records, feedback, now: Date.now(), saveFailed, logOffset, reviewing, art }
-    if (animationOnly && !modal && !reviewing) drawCombatFrame(context, view, state, options)
+    if (modal === 'growth') upgradeArt.ensure()
+    const options = { modal, best: records, feedback, now: Date.now(), saveFailed, logOffset, reviewing, art, upgradeArt, selectedUpgrade, pendingChoice }
+    if (region && !modal && !reviewing && saveFailed === paintedSaveFailed) drawCombatFrame(context, view, state, options, region === 'combat')
     else draw(context, view, state, options)
+    paintedSaveFailed = saveFailed
   }
   function stop() {
     if (timer !== null && typeof clearTimeout === 'function') clearTimeout(timer)
@@ -78,12 +91,12 @@ function start({ context, screen: initialScreen, goHome }) {
       if (!active || hidden || modal) return
       if (resultAt !== null) {
         if (Date.now() >= resultAt) { resultAt = null; modal = 'result'; clearFeedback(); paint() }
-        else { paint(true); schedule() }
+        else { paint('animation'); schedule() }
         return
       }
       const hadEffects = feedback.effects.length > 0 || isAnimating(feedback, Date.now())
       const changed = advance()
-      if (changed || hadEffects || modal) paint(!changed && !modal)
+      if (changed || hadEffects || modal) paint(changed ? state.status === 'fighting' ? 'combat' : undefined : 'animation')
       schedule()
     }, delay)
   }
@@ -137,13 +150,19 @@ function start({ context, screen: initialScreen, goHome }) {
     }
     else if (action === 'primary') {
       if (modal === 'result') {
-        if (state.status === 'won' && state.round < 100) { rules.nextRound(state); modal = 'growth'; clearFeedback(); logOffset = 0; reviewing = false; persist() }
-        else { state = newState(); modal = null; clearFeedback(); logOffset = 0; reviewing = false; persist() }
+        if (state.status === 'won' && state.round < 100) { rules.nextRound(state); modal = 'growth'; selectedUpgrade = null; pendingChoice = null; clearFeedback(); logOffset = 0; reviewing = false; persist() }
+        else { state = newState(); modal = null; pendingChoice = null; selectedUpgrade = null; clearFeedback(); logOffset = 0; reviewing = false; persist() }
       } else if (modal === 'records') modal = 'reset'
-      else if (modal === 'reset') { state = newState(); modal = null; clearFeedback(); logOffset = 0; reviewing = false; persist() }
+      else if (modal === 'reset') { state = newState(); modal = null; pendingChoice = null; selectedUpgrade = null; clearFeedback(); logOffset = 0; reviewing = false; persist() }
       else { modal = pendingUpgrade() ? 'growth' : null; reviewing = false; logOffset = 0 }
+    } else if (action.startsWith('owned:')) {
+      selectedUpgrade = action.slice(6)
     } else if (action.startsWith('upgrade:')) {
-      if (rules.chooseUpgrade(state, action.slice(8))) { modal = null; clearFeedback(); persist() }
+      pendingChoice = action.slice(8)
+    } else if (action === 'confirmUpgrade') {
+      if (modal === 'growth' && pendingChoice && rules.chooseUpgrade(state, pendingChoice)) {
+        modal = null; pendingChoice = null; clearFeedback(); persist()
+      }
     } else if (action === 'name') rename()
     else if (action === 'randomName' && state.status === 'prepare') {
       randomName()
@@ -169,10 +188,15 @@ function start({ context, screen: initialScreen, goHome }) {
   function hit(touch) {
     if (modal) {
       if (modal === 'growth') {
-        const index = view.growthCards.findIndex(rect => contains(rect, touch))
-        const choice = rules.upgradeChoices(state)[index]
+        const choices = rules.upgradeChoices(state)
+        const index = growthCardRects(view, choices.length).findIndex(rect => contains(rect, touch))
+        const choice = choices[index]
         if (choice) return `upgrade:${choice.id}`
-        return contains(view.growthHome, touch) ? 'home' : contains(view.growthRestart, touch) ? 'restart' : null
+        const owned = rules.ownedUpgrades(state.progression)
+        const slot = view.growthOwned.findIndex(rect => contains(rect, touch))
+        if (owned[slot]) return `owned:${owned[slot].id}`
+        return contains(view.growthHome, touch) ? 'home' : contains(view.growthRestart, touch) ? 'restart' :
+          pendingChoice && contains(view.growthConfirm, touch) ? 'confirmUpgrade' : null
       }
       if (['help', 'weapons', 'relations', 'momentum'].includes(modal)) {
         const index = view.guideTabs.findIndex(rect => contains(rect, touch))
@@ -239,6 +263,7 @@ function start({ context, screen: initialScreen, goHome }) {
       if (!hidden) advance()
       stop(); resultAt = null; persist(); closeKeyboard(); active = false; pressed = null; clearFeedback()
       art.dispose()
+      upgradeArt.dispose()
       wx.offTouchStart(onStart); wx.offTouchEnd(onEnd); wx.offTouchCancel(cancel)
       if (wx.offTouchMove) wx.offTouchMove(onMove)
       if (wx.offKeyboardConfirm) wx.offKeyboardConfirm(onKeyboardConfirm)

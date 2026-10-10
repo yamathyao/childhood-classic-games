@@ -4,6 +4,44 @@ const rules = require('../games/textbattle/rules.js')
 const { layout } = require('../games/textbattle/layout.js')
 const { parts } = require('../games/textbattle/names.js')
 
+test('both actors start with 5–10 percent critical and dodge rates across all equipment, stances and rerolls', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const state = rules.initialState(Math.imul(seed, 2654435761) >>> 0)
+    for (let roll = 0; roll < 2; roll++) {
+      const base = state.player.base
+      assert.ok(base.spd >= .6 && base.spd <= 1.2)
+      // Compare the same allocation against the previous speed conversion.
+      const oldSpeed = .8 + (base.spd - .6) / .016 * .022
+      assert.ok(base.spd / oldSpeed >= .72 && base.spd / oldSpeed <= .76)
+      for (const weapon of rules.weapons) for (const stance of rules.stances) {
+        rules.configure(state, 'weapon', weapon.id); rules.configure(state, 'stance', stance.id)
+        for (const actor of [state.player, state.enemy]) for (const key of ['crit', 'dodge']) {
+          assert.ok(actor.stats[key] >= 5 && actor.stats[key] <= 10, `${seed}/${weapon.id}/${stance.id}/${key}`)
+        }
+        assert.deepEqual(rules.restore(rules.snapshot(state)), state)
+      }
+      assert.ok(rules.reroll(state))
+    }
+  }
+})
+
+test('low starting rates retain equipment differences and do not cap later probability growth at ten percent', () => {
+  const base = { maxHp: 210, atk: 18, def: 7, spd: .92, crit: 7, dodge: 6.4 }
+  const values = Object.fromEntries(rules.weapons.map(w => [w.id, rules.stats(base, w.id, 'guard', null)]))
+  assert.equal(values.saber.crit, 9); assert.equal(values.sword.crit, 8)
+  assert.ok(values.saber.crit > values.spear.crit)
+  assert.ok(Object.values(values).every(v => values.dual.spd >= v.spd && values.dual.dodge >= v.dodge))
+  const agile = rules.stats(base, 'dual', 'agile', null)
+  assert.equal(agile.dodge, 9.4); assert.ok(agile.spd > values.dual.spd)
+  const growth = require('../games/textbattle/progression.js').fresh()
+  for (const id of ['crit', 'dodge', 'spd']) {
+    require('../games/textbattle/progression.js').add(growth, { id, quality: 'epic' })
+  }
+  const after = rules.stats(base, 'dual', 'agile', null, 4, undefined, growth)
+  assert.equal(after.crit, 13); assert.equal(after.dodge, 15.4)
+  assert.ok(Math.abs(after.spd - agile.spd - .12) < 1e-10)
+})
+
 test('imaginative names cover broad surnames and avoid recent surnames, given names and combinations', () => {
   const state = { rng: 173921 }
   const recent = []; const surnames = new Set(); const names = new Set()
@@ -27,8 +65,8 @@ test('weapons and stances alter real combat stats and lock during fighting', () 
   rules.configure(state, 'weapon', 'sword'); const sword = { ...state.player.stats }
   rules.configure(state, 'weapon', 'dual'); const dual = { ...state.player.stats }
   assert.ok(sword.atk > dual.atk); assert.ok(dual.spd > sword.spd)
-  rules.configure(state, 'weapon', 'axe'); assert.equal(state.player.stats.pierce, .55)
-  rules.configure(state, 'weapon', 'spear'); assert.equal(state.player.stats.pierce, .2)
+  rules.configure(state, 'weapon', 'axe'); assert.equal(state.player.stats.pierce, 0)
+  rules.configure(state, 'weapon', 'spear'); assert.equal(state.player.stats.pierce, 0)
   rules.configure(state, 'stance', 'strong'); const strong = { ...state.player.stats }
   rules.configure(state, 'stance', 'guard'); assert.ok(state.player.stats.def > strong.def)
   assert.ok(state.player.stats.atk < strong.atk)
@@ -48,8 +86,8 @@ test('six distinct weapon choices retain their intended combat differences', () 
   assert.ok(attributes.sword.spd > attributes.saber.spd)
   assert.ok(attributes.dual.spd > attributes.sword.spd)
   assert.ok(attributes.dual.dodge > attributes.sword.dodge)
-  assert.ok(attributes.axe.pierce > attributes.halberd.pierce && attributes.halberd.pierce > attributes.spear.pierce)
-  assert.ok(attributes.halberd.atk > attributes.spear.atk && attributes.halberd.spd < attributes.spear.spd)
+  assert.ok(Object.values(attributes).every(item => item.pierce === 0))
+  assert.ok(attributes.axe.atk > attributes.sword.atk && attributes.halberd.spd < attributes.spear.spd)
   assert.equal(rules.configure(state, 'weapon', 'hammer'), false)
 })
 

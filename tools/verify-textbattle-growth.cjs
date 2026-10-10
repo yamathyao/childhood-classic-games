@@ -3,12 +3,14 @@ const rules = require('../games/textbattle/rules.js')
 const routes = {
   attack: ['atk', 'crit', 'spd', 'hp', 'def', 'dodge'],
   survival: ['hp', 'def', 'dodge', 'atk', 'spd', 'crit'],
-  speed: ['spd', 'dodge', 'crit', 'atk', 'hp', 'def']
+  defense: ['def', 'hp', 'dodge', 'atk', 'spd', 'crit'],
+  speed: ['spd', 'dodge', 'crit', 'atk', 'hp', 'def'],
+  quality: ['atk', 'hp', 'spd', 'crit', 'def', 'dodge']
 }
 const rounds = [1, 5, 10, 20, 30, 60, 100]
-function choose(state, route) {
+function choose(state, route, preferQuality = false) {
   const options = rules.upgradeChoices(state)
-  const choice = [...options].sort((a, b) => route.indexOf(a.id) - route.indexOf(b.id))[0]
+  const choice = [...options].sort((a, b) => (preferQuality ? b.multiplier - a.multiplier : 0) || route.indexOf(a.id) - route.indexOf(b.id))[0]
   assert.ok(choice && rules.chooseUpgrade(state, choice.id))
 }
 // Isolated matchups compare characters who have legitimately taken N-1 rewards.
@@ -27,7 +29,7 @@ function verify(samples = 30) {
           state.enemy.stats = rules.stats(state.enemy.base, enemy.id, 'strong', true, round, rules.weapons, state.progression)
           state.enemy.hp = state.enemy.stats.maxHp; state.enemy.cooldown = 1000 / state.enemy.stats.spd
           rules.startFight(state); rules.tick(state, 60000); rules.tick(state, 60000)
-          assert.ok(['won', 'lost'].includes(state.status), 'Combat must finish within 120 seconds')
+          assert.ok(['won', 'lost'].includes(state.status), `Combat must finish within 120 seconds: ${routeName}/${round}/${weapon.id}/${enemy.id}/${seed} ${JSON.stringify({ player: state.player.stats, enemy: state.enemy.stats })}`)
           assert.ok(rules.restore(rules.snapshot(state)), `${routeName}/${round}/${weapon.id}`)
           const row = groups[round]; const win = Number(state.status === 'won')
           row.wins += win; row.battles++; row.duration += state.elapsedMs
@@ -37,7 +39,7 @@ function verify(samples = 30) {
         }
         if (round < 100) {
           training.status = 'won'; training.enemy.hp = 0; training.streak = round
-          assert.ok(rules.nextRound(training)); choose(training, route)
+          assert.ok(rules.nextRound(training)); choose(training, route, routeName === 'quality')
         }
       }
     }
