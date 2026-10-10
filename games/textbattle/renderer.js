@@ -40,8 +40,9 @@ function control(c, rect, label, detail, selected = false, enabled = true) {
   box(c, rect, selected ? '#354758' : '#1b2b40', 8, selected ? colors.gold : colors.line)
   const compact = rect.w < 80
   const short = rect.h < 40
-  text(c, label, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (short ? 10 : 13), compact ? 13 : 14, selected ? colors.gold : colors.ink, compact ? 'center' : 'left', true)
-  text(c, compact ? detail.replace(/ · /g, '') : detail, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (short ? 25 : 29), 10, colors.muted, compact ? 'center' : 'left')
+  const tight = rect.h < 32
+  text(c, label, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (tight ? 9 : short ? 10 : 13), compact ? 13 : 14, selected ? colors.gold : colors.ink, compact ? 'center' : 'left', true)
+  text(c, compact ? detail.replace(/ · /g, '') : detail, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (tight ? 22 : short ? 25 : 29), 10, colors.muted, compact ? 'center' : 'left')
   c.restore()
 }
 function drawMomentum(c, rect, actor, accent, meterState, now) {
@@ -183,7 +184,7 @@ function drawCombatFrame(c, view, state, options, changed = false) {
 }
 function drawTactics(c, view, state) {
   const prepare = state.status === 'prepare'
-  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon)
+  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon, state.combatVersion)
   const skillProgress = state.combatVersion >= 5 ? state.player.combat.momentum >= momentum.max ? '待发' : Math.floor(state.player.combat.momentum / 100) : `${state.player.combat.attacks % 3}/3`
   const skillLabel = prepare ? '武器技 ›' : `${selectedSkill.short} · ${skillProgress} ›`
   const skillReady = !prepare && state.combatVersion >= 5 && state.player.combat.momentum >= momentum.max
@@ -193,17 +194,20 @@ function drawTactics(c, view, state) {
 }
 function drawLog(c, view, state, { logOffset = 0, reviewing = false }) {
   const prepare = state.status === 'prepare'; const tactical = state.combatVersion >= 2
-  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon)
+  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon, state.combatVersion)
   if (view.log.h >= 20) {
     const r = view.log
     box(c, r, '#142337', 9, '#38516d')
     if (prepare) {
-      text(c, stanceCatalog(state.combatVersion, state.progression ? state.progression.version : 1).find(item => item.id === state.stance).description, r.x + 12, r.y + Math.min(16, r.h / 2), 12, colors.muted)
-      if (tactical && r.h >= 70) {
+      const trigger = state.combatVersion >= 5 ? '武势满100自动触发' : '每3次出招自动触发'
+      text(c, `${selectedSkill.name} · ${trigger}`, r.x + 12, r.y + 12, 12, colors.gold, 'left', true)
+      text(c, selectedSkill.description, r.x + 12, r.y + 30, 12, colors.ink)
+      const stanceDescription = stanceCatalog(state.combatVersion, state.progression ? state.progression.version : 1).find(item => item.id === state.stance).description
+      text(c, stanceDescription, r.x + 12, r.y + 48, Math.min(11, (r.w - 24) / stanceDescription.length), colors.muted)
+      if (tactical && r.h >= 80) {
         const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
         const enemyWeapon = weapons.find(item => item.id === state.enemy.weapon).name
-        text(c, `对手持${enemyWeapon} · ${match.name}`, r.x + 12, r.y + 39, 12, match.disadvantaged ? colors.red : colors.blue)
-        text(c, `${selectedSkill.name} · 武势满100自动触发`, r.x + 12, r.y + 59, 11, colors.gold)
+        text(c, `对手持${enemyWeapon} · ${match.name}`, r.x + 12, r.y + 68, 12, match.disadvantaged ? colors.red : colors.blue)
       }
     } else {
       const end = Math.max(0, state.logs.length - logOffset)

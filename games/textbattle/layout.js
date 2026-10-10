@@ -13,16 +13,17 @@ function nameControls(view, name) {
     randomName: { ...view.randomName, x: view.name.x + nameWidth + 6 }
   }
 }
-function layout({ width, height, top = 0, bottom = 0 }) {
+function layout({ width, height, top = 0, bottom = 0 }, prepare = false) {
   const margin = 18; const w = width - margin * 2
   const compact = height - top - bottom < 570
-  const arena = { x: margin, y: top + (compact ? 82 : 88), w, h: Math.min(170, Math.max(88, 90 + (height - top - bottom - 568) * .4)) }
+  const compactPreparation = compact && prepare
+  const arena = { x: margin, y: top + (compactPreparation ? 76 : compact ? 82 : 88), w, h: Math.min(170, Math.max(compactPreparation ? 72 : 88, 90 + (height - top - bottom - 568) * .4)) }
   const attributes = attributePanels({ x: margin, y: arena.y + arena.h + 10, w, h: 100 })
-  const weaponY = attributes.player.y + attributes.player.h + 22
+  const weaponY = attributes.player.y + attributes.player.h + (compactPreparation ? 20 : 22)
   const weaponW = (w - 12) / 3
-  const weapons = Array.from({ length: 6 }, (_, index) => ({ x: margin + index % 3 * (weaponW + 6), y: weaponY + Math.floor(index / 3) * 40, w: weaponW, h: 34 }))
-  const stanceY = weaponY + (compact ? 100 : 108)
-  const stanceHeight = compact ? 36 : 40
+  const weapons = Array.from({ length: 6 }, (_, index) => ({ x: margin + index % 3 * (weaponW + 6), y: weaponY + Math.floor(index / 3) * (compactPreparation ? 34 : 40), w: weaponW, h: compactPreparation ? 30 : 34 }))
+  const stanceY = weaponY + (compactPreparation ? 90 : compact ? 100 : 108)
+  const stanceHeight = compactPreparation ? 34 : compact ? 36 : 40
   const stances = Array.from({ length: 3 }, (_, index) => ({ x: margin + index * (w + 8) / 3, y: stanceY, w: (w - 16) / 3, h: stanceHeight }))
   const action = { x: margin, y: height - bottom - 54, w, h: 44 }
   const logY = stanceY + stanceHeight + 8

@@ -7,9 +7,10 @@ const { loadUpgradeIcons } = require('./upgrade-art.js')
 const { createFeedback, recordEvents, isAnimating } = require('./feedback.js')
 
 function start({ context, screen: initialScreen, goHome }) {
-  let screen = initialScreen; let view = layout(screen)
+  let screen = initialScreen; let view
   const newState = () => rules.initialState((Date.now() ^ Math.floor(Math.random() * 4294967296)) >>> 0)
   let state = rules.loadProgress(key => wx.getStorageSync(key)) || newState(); let records = []
+  let preparing = state.status === 'prepare'; view = layout(screen, preparing)
   try {
     const stored = wx.getStorageSync(rules.bestKey)
     if (Array.isArray(stored)) records = stored.filter(item => item && Number.isInteger(item.runId) &&
@@ -59,6 +60,9 @@ function start({ context, screen: initialScreen, goHome }) {
   }
   function paint(region) {
     if (!active || hidden) return
+    if (preparing !== (state.status === 'prepare')) {
+      preparing = state.status === 'prepare'; view = layout(screen, preparing); region = undefined
+    }
     if (modal === 'growth') upgradeArt.ensure()
     const options = { modal, best: records, feedback, now: Date.now(), saveFailed, logOffset, reviewing, art, upgradeArt, selectedUpgrade, pendingChoice }
     if (region && !modal && !reviewing && saveFailed === paintedSaveFailed) drawCombatFrame(context, view, state, options, region === 'combat')
@@ -257,7 +261,7 @@ function start({ context, screen: initialScreen, goHome }) {
   return {
     hide() { if (!active) return; pause(state.status === 'fighting' ? 'pause' : modal); hidden = true; closeKeyboard() },
     show() { if (!active) return; hidden = false; paint() },
-    resize(next) { if (!active) return; if (state.status === 'fighting') pause(); screen = next; view = layout(screen); logOffset = Math.min(logOffset, Math.max(0, state.logs.length - view.logPageSize)); pressed = null; paint() },
+    resize(next) { if (!active) return; if (state.status === 'fighting') pause(); screen = next; view = layout(screen, preparing); logOffset = Math.min(logOffset, Math.max(0, state.logs.length - view.logPageSize)); pressed = null; paint() },
     dispose() {
       if (!active) return
       if (!hidden) advance()

@@ -459,6 +459,31 @@ test('text battle saves victory immediately, advances to full health and keeps o
   assertReleased(resumed)
 })
 
+test('preparation explains each selected weapon, preserves stance text and stays idle', () => {
+  for (const screen of [{ width: 320, height: 568, top: 24, bottom: 16, dpr: 2 }, { width: 375, height: 667, top: 24, bottom: 16, dpr: 2 }]) {
+    const game = boot('textbattle', { screen })
+    const rules = game.load('games/textbattle/rules.js')
+    const view = game.load('games/textbattle/layout.js').layout(screen, true)
+    for (const [index, weapon] of rules.weapons.entries()) {
+      const before = game.storage.get(rules.saveKey).rng
+      game.tap(view.weapons[index])
+      const ability = rules.weaponSkill(weapon.id)
+      assert.equal(game.storage.get(rules.saveKey).weapon, weapon.id)
+      assert.equal(game.storage.get(rules.saveKey).rng, before)
+      assert.ok(game.texts.some(item => item.text === `${ability.name} · 武势满100自动触发` && item.y > view.log.y))
+      assert.ok(game.texts.some(item => item.text === ability.description && item.y > view.log.y))
+      assert.ok(game.texts.some(item => item.text.startsWith('守御：') && item.y + 6 < view.action.y))
+      assert.equal(game.timers.size, 0)
+    }
+    game.tap(view.stances[2])
+    assert.ok(game.texts.some(item => item.text.startsWith('游斗：')))
+    assert.ok(game.texts.some(item => item.text === rules.weaponSkill('halberd').description))
+    game.tap(view.action); game.advance(1000); game.scene.hide()
+    assert.equal(game.storage.get(rules.saveKey).status, 'fighting')
+    assertReleased(game)
+  }
+})
+
 test('weapon skills and relationship guide are read-only, pause combat and never add schedulers', () => {
   const game = boot('textbattle')
   const rules = game.load('games/textbattle/rules.js')
