@@ -10,6 +10,8 @@ const { drawCover: drawTetrisCover } = require('../tetris/renderer.js')
 const { drawCover: drawDrillerCover } = require('../driller/renderer.js')
 const drillerLobby = require('../driller/lobby.js')
 const textbattleLobby = require('../textbattle/lobby.js')
+const officeLobby = require('../office/lobby.js')
+const { drawCover: drawOfficeCover } = require('../office/renderer.js')
 const { drawCover: drawTextbattleCover } = require('../textbattle/renderer.js')
 const { loadSprites: loadTextbattleSprites } = require('../textbattle/art.js')
 const { levels: drillerLevels, getLevel: getDrillerLevel, defaultLevel: defaultDrillerLevel } = require('../driller/levels.js')
@@ -155,6 +157,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     else if (id === 'tetris') drawTetrisCover(c, preview, { compact: true })
     else if (id === 'driller') drawDrillerCover(c, preview)
     else if (id === 'textbattle') drawTextbattleCover(c, preview, textbattleArt)
+    else if (id === 'office') drawOfficeCover(c, preview)
   }
 
   function drawSokobanPicker() {
@@ -187,6 +190,11 @@ function start({ context: c, screen: initialScreen, openGame }) {
 
   function drawDetail() {
     const { width, height, top, bottom } = screen
+    if (detailGame === 'office') {
+      const controls = officeLobby.drawDetail(c, screen)
+      detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
+      return
+    }
     if (detailGame === 'textbattle') {
       const controls = textbattleLobby.drawDetail(c, screen, textbattleArt)
       detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
@@ -314,7 +322,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     if (detailGame) {
       if (contains(detailBack, t)) pressed = { ...t, action: 'back' }
       else if (contains(detailSelect, t)) pressed = { ...t, action: 'levels' }
-      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'textbattle' ? 'textbattle-start' : detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
+      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'office' ? 'office-start' : detailGame === 'textbattle' ? 'textbattle-start' : detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
       return
     }
     if (t.clientY < screen.top + 118 || t.clientY >= screen.height - screen.bottom - 22) return
@@ -398,6 +406,8 @@ function start({ context: c, screen: initialScreen, openGame }) {
       return
     }
     if (!tap) return
+    if (action === 'detail-office') { detailGame = 'office'; pickerOpen = false; repaint(); return }
+    if (action === 'office-start') { openGame('office'); return }
     if (action === 'detail-textbattle') { detailGame = 'textbattle'; pickerOpen = false; repaint(); return }
     if (action === 'textbattle-start') { openGame('textbattle'); return }
     if (action === 'detail-driller') { detailGame = 'driller'; pickerOpen = false; repaint(); return }

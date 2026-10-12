@@ -7,6 +7,7 @@ const { layout } = require('../games/sokoban/layout.js')
 const { create } = require('../games/sokoban/rules.js')
 const { defaultLevel, getLevel, levels } = require('../games/sokoban/levels.js')
 const { homeCardLayout } = require('../games/index/game.js')
+const { games } = require('../games/index/order.js')
 
 function boot(options = {}) {
   const listeners = Object.fromEntries(['TouchStart', 'TouchMove', 'TouchEnd', 'TouchCancel', 'Hide', 'Show', 'WindowResize'].map(name => [name, new Set()]))
@@ -120,7 +121,7 @@ test('tetris card opens its detail page and routes into an independent scene', (
 test('all collection cards share one size and preview slot, and the list scrolls from a card', () => {
   const screen = { width: 375, height: 812, top: 24, bottom: 16 }
   const view = homeCardLayout(screen)
-  assert.equal(view.cards.length, 5)
+  assert.equal(view.cards.length, games.length)
   view.cards.forEach(card => assert.deepEqual([card.w, card.h], [view.cards[0].w, view.cards[0].h]))
   const slots = view.cards.map(card => view.preview(card))
   slots.forEach((rect, index) => {
