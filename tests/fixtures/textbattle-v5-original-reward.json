@@ -1,0 +1,101 @@
+{
+  "version": 5,
+  "combatVersion": 5,
+  "runId": 34,
+  "rng": 1719381946,
+  "round": 9,
+  "streak": 8,
+  "status": "prepare",
+  "weapon": "saber",
+  "stance": "agile",
+  "elapsedMs": 0,
+  "logs": [],
+  "progression": {
+    "version": 1,
+    "counts": {
+      "atk": 0,
+      "hp": 1,
+      "def": 3,
+      "spd": 0,
+      "crit": 0,
+      "dodge": 3
+    },
+    "pending": true
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 0,
+      "criticals": 0,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 0
+    },
+    "enemy": {
+      "damage": 0,
+      "criticals": 0,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 0
+    }
+  },
+  "player": {
+    "name": "沈岚歌",
+    "gender": "male",
+    "base": {
+      "maxHp": 222,
+      "atk": 18,
+      "def": 11,
+      "crit": 15.463917380295467,
+      "dodge": 12.000575807898711,
+      "spd": 1.1992505984419999
+    },
+    "stats": {
+      "maxHp": 234,
+      "atk": 23,
+      "def": 15,
+      "spd": 1.160394879052479,
+      "crit": 23.463917380295467,
+      "dodge": 29.000575807898713,
+      "pierce": 0
+    },
+    "hp": 234,
+    "cooldown": 861.7756059183496,
+    "combat": {
+      "attacks": 0,
+      "hitsTaken": 0,
+      "ward": false,
+      "momentum": 0
+    }
+  },
+  "enemy": {
+    "name": "西门吹鳕",
+    "gender": "male",
+    "weapon": "spear",
+    "base": {
+      "maxHp": 232,
+      "atk": 16,
+      "def": 7,
+      "crit": 21.782185867690433,
+      "dodge": 13.186590124065505,
+      "spd": 1.2343205903021588
+    },
+    "stats": {
+      "maxHp": 260,
+      "atk": 25,
+      "def": 6,
+      "spd": 1.2096341784961155,
+      "crit": 24.782185867690433,
+      "dodge": 13.186590124065505,
+      "pierce": 0.2
+    },
+    "hp": 260,
+    "cooldown": 826.69621756493,
+    "combat": {
+      "attacks": 0,
+      "hitsTaken": 0,
+      "ward": false,
+      "momentum": 0
+    }
+  }
+}

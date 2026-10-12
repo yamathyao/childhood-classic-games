@@ -1,0 +1,146 @@
+{
+  "version": 5,
+  "combatVersion": 5,
+  "runId": 89,
+  "rng": 2018822476,
+  "round": 8,
+  "streak": 7,
+  "status": "fighting",
+  "weapon": "saber",
+  "stance": "agile",
+  "elapsedMs": 1500,
+  "logs": [
+    {
+      "side": "player",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 761,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 28,
+      "critical": false,
+      "dodged": false,
+      "time": 961,
+      "counter": false,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 2,
+    "counts": {
+      "atk": 1,
+      "hp": 1,
+      "def": 2,
+      "spd": 0,
+      "crit": 3,
+      "dodge": 0
+    },
+    "qualities": {
+      "normal": {
+        "atk": 1,
+        "hp": 1,
+        "def": 2,
+        "spd": 0,
+        "crit": 3,
+        "dodge": 0
+      },
+      "fine": {
+        "atk": 0,
+        "hp": 0,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "epic": {
+        "atk": 0,
+        "hp": 0,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      }
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 0,
+      "criticals": 0,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 1
+    },
+    "enemy": {
+      "damage": 28,
+      "criticals": 0,
+      "dodges": 1,
+      "skills": 0,
+      "attacks": 1
+    }
+  },
+  "player": {
+    "name": "沈松行",
+    "gender": "male",
+    "base": {
+      "maxHp": 213,
+      "atk": 18,
+      "def": 8,
+      "crit": 16.405523357439705,
+      "dodge": 13.987624487206485,
+      "spd": 1.3127032462161319
+    },
+    "stats": {
+      "maxHp": 225,
+      "atk": 25,
+      "def": 11,
+      "spd": 1.3132283275146184,
+      "crit": 36.405523357439705,
+      "dodge": 21.987624487206485,
+      "pierce": 0
+    },
+    "hp": 197,
+    "cooldown": 22.9644061860497,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 1,
+      "ward": false,
+      "momentum": 1369
+    }
+  },
+  "enemy": {
+    "name": "阿霏",
+    "gender": "male",
+    "weapon": "halberd",
+    "base": {
+      "maxHp": 214,
+      "atk": 19,
+      "def": 9,
+      "crit": 17.58224815584179,
+      "dodge": 14.949995101424191,
+      "spd": 1.1567871148305797
+    },
+    "stats": {
+      "maxHp": 246,
+      "atk": 32,
+      "def": 7,
+      "spd": 1.0411084033475217,
+      "crit": 21.58224815584179,
+      "dodge": 14.949995101424191,
+      "pierce": 0.35
+    },
+    "hp": 246,
+    "cooldown": 421.02954271554404,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 0,
+      "ward": false,
+      "momentum": 2791
+    }
+  }
+}

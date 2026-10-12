@@ -15,7 +15,11 @@ const weaponSkills = [
   { id: 'axe-break', weapon: 'axe', name: '裂甲', short: '裂甲', note: '重斧破甲', description: '无视防御，伤害+20%。' },
   { id: 'halberd-ward', weapon: 'halberd', name: '架势', short: '架势', note: '挥戟护身', description: '伤害+20%，下次受击减伤25%。' }
 ]
-const skills = [...legacySkills, ...weaponSkills]
+const currentWeaponSkills = weaponSkills.map(item => ({ ...item, description: item.description.replace('伤害+', '攻击+') }))
+const simpleWeaponSkills = currentWeaponSkills.map(item => ({ ...item,
+  description: item.weapon === 'spear' ? '本次不减对方防御。' : item.weapon === 'axe' ? '本次不减防御，攻击+20%。' :
+    item.weapon === 'sword' ? '本次必中，攻击+15%。' : '本次' + item.description }))
+const skills = [...legacySkills, ...simpleWeaponSkills]
 // Old active battles retain these modifiers until the next round.
 const legacyTraits = {
   duelist: { name: '刀势', note: '第三次出招伤害 +25%', counters: ['sword', 'dual'] },
@@ -24,14 +28,15 @@ const legacyTraits = {
   brute: { name: '蓄力', note: '第三次出招伤害 +35%', counters: ['saber'] }
 }
 const skill = id => skills.find(item => item.id === id)
-const weaponSkill = weapon => weaponSkills.find(item => item.weapon === weapon)
+const weaponSkill = (weapon, combatVersion = 8) => (combatVersion >= 8 ? simpleWeaponSkills : combatVersion === 7 ? currentWeaponSkills : weaponSkills).find(item => item.weapon === weapon)
 // Hundredths of a point keep saves and split-time combat exactly reproducible.
 const momentum = { max: 10000, dealt: 160, taken: 110, critical: 600, dodge: 800 }
 const counterTargets = { sword: 'dual', dual: 'axe', axe: 'halberd', halberd: 'spear', spear: 'saber', saber: 'sword' }
 const legacyCounters = (weapon, kind) => !!legacyTraits[kind] && legacyTraits[kind].counters.includes(weapon)
 const counters = (weapon, target) => !!counterTargets[weapon] && counterTargets[weapon] === target
-function relation(weapon, target) {
-  if (counters(weapon, target)) return { name: '专属克制', symbol: '→', scale: 1.18, counter: true, disadvantaged: false }
+function relation(weapon, target, combatVersion = 6, growthVersion = 2) {
+  const scale = combatVersion >= 6 || (combatVersion === 5 && growthVersion >= 2) ? 1.1 : 1.18
+  if (counters(weapon, target)) return { name: '专属克制', symbol: '→', scale, counter: true, disadvantaged: false }
   if (counters(target, weapon)) return { name: '被克制', symbol: '←', scale: 1, counter: false, disadvantaged: true }
   return { name: '势均力敌', symbol: '=', scale: 1, counter: false, disadvantaged: false }
 }
@@ -84,7 +89,7 @@ function modifiers(state, side) {
   const attacker = state[side]; const defender = state[side === 'player' ? 'enemy' : 'player']
   const weapon = side === 'player' ? state.weapon : state.enemy.weapon
   const target = side === 'player' ? state.enemy.weapon : state.weapon
-  const match = relation(weapon, target)
+  const match = relation(weapon, target, state.combatVersion, state.progression ? state.progression.version : 1)
   attacker.combat.attacks++
   const result = { scale: match.scale, pierce: attacker.stats.pierce, dodge: defender.stats.dodge,
     counter: match.counter, skill: null, trait: null, guarded: false }
@@ -94,12 +99,22 @@ function modifiers(state, side) {
     result.skill = weaponSkill(weapon).id
     if (weapon === 'sword') { result.dodge = 0; result.scale *= 1.15 }
     else if (weapon === 'saber') result.scale *= 1.45
-    else if (weapon === 'spear') { result.pierce = 1; result.dodge *= .5 }
+    else if (weapon === 'spear') {
+      if (state.combatVersion >= 8) result.ignoreDefense = true
+      else { result.pierce = 1; result.dodge *= .5 }
+    }
     else if (weapon === 'dual') result.scale *= 1.35
-    else if (weapon === 'axe') { result.pierce = 1; result.scale *= 1.2 }
+    else if (weapon === 'axe') {
+      if (state.combatVersion >= 8) result.ignoreDefense = true
+      else result.pierce = 1
+      result.scale *= 1.2
+    }
     else if (weapon === 'halberd') result.scale *= 1.2
   }
-  if (defender.combat.ward) { result.scale *= .75; result.guarded = true }
+  if (defender.combat.ward) {
+    if (state.combatVersion < 7) result.scale *= .75
+    result.guarded = true
+  }
   return result
 }
 function afterAttack(state, side, event) {
@@ -139,4 +154,4 @@ function validEvent(event, state) {
     (event.healed === undefined || (event.skill === 'renew' && Number.isInteger(event.healed) && event.healed >= 0 &&
       event.healed <= Math.round(state.player.stats.maxHp * .03)))
 }
-module.exports = { skills, legacySkills, weaponSkills, skill, weaponSkill, momentum, legacyTraits, counters, relation, freshCombat, resetCombat, modifiers, afterAttack, validCombat, validEvent }
+module.exports = { skills, legacySkills, weaponSkills: simpleWeaponSkills, skill, weaponSkill, momentum, legacyTraits, counters, relation, freshCombat, resetCombat, modifiers, afterAttack, validCombat, validEvent }

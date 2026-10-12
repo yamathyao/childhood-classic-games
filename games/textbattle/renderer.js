@@ -1,12 +1,14 @@
 const { box, path, text, gradient, headerButton } = require('../../common/canvas.js')
-const { weapons, stances, skill, weaponSkills, weaponSkill, momentum, counters, relation, upgradeChoices, upgradePreview } = require('./rules.js')
+const { weapons, stances, stanceCatalog, skill, weaponSkills, weaponSkill, momentum, counters, relation, upgradeChoices, upgradePreview, ownedUpgrades, upgradeOdds } = require('./rules.js')
+const { drawUpgradeIcon } = require('./upgrade-art.js')
 const report = require('./report.js')
-const { attributePanels, nameControls } = require('./layout.js')
+const { attributePanels, nameControls, growthCardRects } = require('./layout.js')
 const { drawWeapon } = require('./weapon-art.js')
 const { drawSprite } = require('./art.js')
 const { meterValue, readyDuration, fighterPose } = require('./feedback.js')
 const { drawLabels } = require('./combat-art.js')
 const colors = { bg: '#111c2c', panel: '#1b2b40', line: '#38516d', ink: '#f3edda', muted: '#a8b8c9', gold: '#e8be71', blue: '#7ccddd', red: '#ec937f' }
+const header = { fill: '#273d55', stroke: '#657c90', color: colors.ink, inner: '#3e566c', shadow: 'transparent', size: 12 }
 function line(c, points, color, width) {
   c.beginPath(); c.moveTo(points[0][0], points[0][1]); points.slice(1).forEach(point => c.lineTo(point[0], point[1]))
   c.strokeStyle = color; c.lineWidth = width; c.lineCap = 'round'; c.lineJoin = 'round'; c.stroke()
@@ -38,8 +40,9 @@ function control(c, rect, label, detail, selected = false, enabled = true) {
   box(c, rect, selected ? '#354758' : '#1b2b40', 8, selected ? colors.gold : colors.line)
   const compact = rect.w < 80
   const short = rect.h < 40
-  text(c, label, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (short ? 10 : 13), compact ? 13 : 14, selected ? colors.gold : colors.ink, compact ? 'center' : 'left', true)
-  text(c, compact ? detail.replace(/ · /g, '') : detail, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (short ? 25 : 29), 10, colors.muted, compact ? 'center' : 'left')
+  const tight = rect.h < 32
+  text(c, label, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (tight ? 9 : short ? 10 : 13), compact ? 13 : 14, selected ? colors.gold : colors.ink, compact ? 'center' : 'left', true)
+  text(c, compact ? detail.replace(/ · /g, '') : detail, compact ? rect.x + rect.w / 2 : rect.x + 11, rect.y + (tight ? 22 : short ? 25 : 29), 10, colors.muted, compact ? 'center' : 'left')
   c.restore()
 }
 function drawMomentum(c, rect, actor, accent, meterState, now) {
@@ -59,6 +62,10 @@ function drawMomentum(c, rect, actor, accent, meterState, now) {
     }
   }
   text(c, ready ? '武势 待发' : `武势 ${Math.floor(actor.combat.momentum / 100)}`, rect.x + rect.w - 8, meter.y + 3, 9, ready ? '#ffe3a2' : colors.muted, 'right', ready)
+  if (meterState) {
+    meterState.paintedValue = value; meterState.paintedPulse = pulse
+    meterState.paintedCharge = actor.combat.momentum
+  }
 }
 function drawAttributes(c, panels, state, feedback, now) {
   const entries = [['生命', 'hp'], ['攻速 /s', 'spd'], ['攻击', 'atk'], ['暴击', 'crit'], ['防御', 'def'], ['闪避', 'dodge']]
@@ -92,9 +99,10 @@ function drawAttributes(c, panels, state, feedback, now) {
     })
   }
 }
-function actionButton(c, rect, label, primary = true) {
-  box(c, rect, primary ? '#dfb673' : '#253a50', 9, primary ? '#f3d69d' : '#58718a')
-  text(c, label, rect.x + rect.w / 2, rect.y + rect.h / 2, 15, primary ? '#1b2634' : colors.ink, 'center', true)
+function actionButton(c, rect, label, primary = true, challenge = false) {
+  const fill = challenge ? gradient(c, rect.x, rect.y, rect.w, rect.h, ['#ae5730', '#793d32']) : primary ? '#dfb673' : '#253a50'
+  box(c, rect, fill, 9, challenge ? '#f5c77e' : primary ? '#f3d69d' : '#58718a')
+  text(c, label, rect.x + rect.w / 2, rect.y + rect.h / 2, 15, challenge ? '#fff0cb' : primary ? '#1b2634' : colors.ink, 'center', true)
 }
 function logText(event) {
   const time = `${(event.time / 1000).toFixed(1)}s`
@@ -106,9 +114,18 @@ function logText(event) {
 function drawArena(c, view, state, feedback, now, art) {
   const { arena, width } = view
   const effects = feedback ? feedback.effects : []
-  box(c, arena, gradient(c, arena.x, arena.y, arena.w, arena.h, ['#253b50', '#142335']), 12, '#4b6278')
+  const challenge = state.progression && state.round % 5 === 0
+  const preparingChallenge = challenge && state.status === 'prepare'
+  box(c, arena, gradient(c, arena.x, arena.y, arena.w, arena.h, preparingChallenge ? ['#46342c', '#202534'] : ['#253b50', '#142335']), 12, preparingChallenge ? '#e8be71' : '#4b6278')
   c.save(); path(c, arena.x + 1, arena.y + 1, arena.w - 2, arena.h - 2, 11); c.clip()
-  text(c, `第 ${state.round} 战${state.progression && state.round % 5 === 0 ? ' · 强敌' : ''}`, width / 2, arena.y + 15, 11, colors.gold, 'center')
+  if (preparingChallenge) {
+    const badge = { x: width / 2 - 90, y: arena.y + 1, w: 180, h: 18 }
+    box(c, badge, gradient(c, badge.x, badge.y, badge.w, badge.h, ['#f4d798', '#dca255']), 7, '#ffe9b7')
+    for (const x of [badge.x + 13, badge.x + badge.w - 13]) {
+      line(c, [[x, badge.y + 4], [x + 4, badge.y + 9], [x, badge.y + 14], [x - 4, badge.y + 9], [x, badge.y + 4]], '#754227', 1.5)
+    }
+    text(c, `第 ${state.round} 战 · 强敌挑战`, width / 2, badge.y + badge.h / 2, 13, '#4c2b1c', 'center', true)
+  } else text(c, `第 ${state.round} 战${challenge ? ' · 强敌' : ''}`, width / 2, arena.y + 15, 11, colors.gold, 'center')
   const center = width / 2; const half = (arena.w - 36) / 2
   const size = Math.min(62, (arena.h - 55) / 1.7)
   const ground = arena.y + arena.h - 10
@@ -138,26 +155,82 @@ function drawArena(c, view, state, feedback, now, art) {
   c.restore()
 }
 // Between attacks only the arena and the narrow meter strips can change.
-function drawCombatFrame(c, view, state, { feedback, now, art }) {
+function drawCombatFrame(c, view, state, options, changed = false) {
+  const { feedback, now, art } = options
   drawArena(c, view, state, feedback, now, art)
+  if (changed) {
+    drawAttributes(c, view.attributes, state, feedback, now)
+    drawTactics(c, view, state)
+    drawLog(c, view, state, options)
+    return
+  }
   if (state.combatVersion < 5) return
   for (const side of ['player', 'enemy']) {
+    const meter = feedback.meters[side]
+    const value = meterValue(meter, now)
+    const pulse = meter.readyAt !== null ? Math.max(0, 1 - (now - meter.readyAt) / readyDuration) : 0
+    // Hit labels live longer than charge easing; settled strips stay untouched.
+    if (meter.paintedValue === value && meter.paintedPulse === pulse && meter.paintedCharge === state[side].combat.momentum) continue
     const rect = view.attributes[side]
     const fills = side === 'player' ? ['#223b50', '#182c40'] : ['#3d343b', '#2c2935']
     c.save()
-    c.beginPath(); c.rect(rect.x + 2, rect.y + 23, rect.w - 4, 15); c.clip()
+    // The first attribute labels start at y + 35.5; never erase their top edge.
+    c.beginPath(); c.rect(rect.x + 2, rect.y + 23, rect.w - 4, 12.5); c.clip()
     c.fillStyle = gradient(c, rect.x, rect.y, rect.w, rect.h, fills)
-    c.fillRect(rect.x + 2, rect.y + 23, rect.w - 4, 15)
+    c.fillRect(rect.x + 2, rect.y + 23, rect.w - 4, 12.5)
     drawMomentum(c, rect, state[side], side === 'player' ? colors.blue : colors.red, feedback.meters[side], now)
     c.restore()
   }
 }
-function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffset = 0, reviewing = false, art }) {
+function drawTactics(c, view, state) {
+  const prepare = state.status === 'prepare'
+  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon, state.combatVersion)
+  const skillProgress = state.combatVersion >= 5 ? state.player.combat.momentum >= momentum.max ? '待发' : Math.floor(state.player.combat.momentum / 100) : `${state.player.combat.attacks % 3}/3`
+  const skillLabel = prepare ? '武器技 ›' : `${selectedSkill.short} · ${skillProgress} ›`
+  const skillReady = !prepare && state.combatVersion >= 5 && state.player.combat.momentum >= momentum.max
+  headerButton(c, view.tactics, state.combatVersion >= 2 ? skillLabel : '武器技 ›', { ...header,
+    fill: skillReady ? '#52412b' : '#354758', color: skillReady ? '#ffe3a2' : colors.gold,
+    stroke: skillReady ? colors.gold : '#a78b58', size: 11 })
+}
+function drawLog(c, view, state, { logOffset = 0, reviewing = false }) {
+  const prepare = state.status === 'prepare'; const tactical = state.combatVersion >= 2
+  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon, state.combatVersion)
+  if (view.log.h >= 20) {
+    const r = view.log
+    box(c, r, '#142337', 9, '#38516d')
+    if (prepare) {
+      const trigger = state.combatVersion >= 5 ? '武势满100自动触发' : '每3次出招自动触发'
+      text(c, `${selectedSkill.name} · ${trigger}`, r.x + 12, r.y + 12, 12, colors.gold, 'left', true)
+      text(c, selectedSkill.description, r.x + 12, r.y + 30, 12, colors.ink)
+      const stanceDescription = stanceCatalog(state.combatVersion, state.progression ? state.progression.version : 1).find(item => item.id === state.stance).description
+      text(c, stanceDescription, r.x + 12, r.y + 48, Math.min(11, (r.w - 24) / stanceDescription.length), colors.muted)
+      if (tactical && r.h >= 80) {
+        const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
+        const enemyWeapon = weapons.find(item => item.id === state.enemy.weapon).name
+        text(c, `对手持${enemyWeapon} · ${match.name}`, r.x + 12, r.y + 68, 12, match.disadvantaged ? colors.red : colors.blue)
+      }
+    } else {
+      const end = Math.max(0, state.logs.length - logOffset)
+      const logs = state.logs.slice(Math.max(0, end - view.logPageSize), end)
+      if (view.logHeaderHeight) {
+        text(c, reviewing ? '战报 · 已暂停' : '交战战报', r.x + 12, r.y + 13, 11, colors.gold)
+        text(c, '下滑看更早记录', r.x + r.w - 12, r.y + 13, 10, colors.muted, 'right')
+      }
+      if (!logs.length) text(c, '尚未出招', r.x + 12, r.y + view.logHeaderHeight + 12, 14, colors.muted)
+      logs.forEach((event, index) => {
+        text(c, logText(event),
+          r.x + 12, r.y + view.logHeaderHeight + 12 + index * view.logLineHeight, 14, event.skill ? colors.gold : event.side === 'player' ? colors.blue : colors.red)
+      })
+      if (view.logFooterHeight) text(c, `最近 ${state.logs.length} 次出招 · ${Math.max(0, end - logs.length) + (logs.length ? 1 : 0)}–${end}`,
+        r.x + r.w / 2, r.y + r.h - 12, 10, colors.muted, 'center')
+    }
+  }
+}
+function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffset = 0, reviewing = false, art, upgradeArt, selectedUpgrade, pendingChoice }) {
   const { width, height, top, arena } = view
   const tactical = state.combatVersion >= 2
   c.clearRect(0, 0, width, height)
   c.fillStyle = gradient(c, 0, 0, width, height, ['#18283d', '#0e1725']); c.fillRect(0, 0, width, height)
-  const header = { fill: '#273d55', stroke: '#657c90', color: colors.ink, inner: '#3e566c', shadow: 'transparent', size: 12 }
   headerButton(c, view.home, '‹ 游戏合集', header)
   headerButton(c, view.restart, '重新开始', { ...header, fill: '#654238', stroke: '#be8870', color: '#ffe0b4', inner: '#8b5c49', size: 11 })
   headerButton(c, view.info, '玩法', header)
@@ -182,52 +255,21 @@ function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffse
   const prepare = state.status === 'prepare'
   drawAttributes(c, view.attributes, state, feedback, now)
   text(c, prepare && state.round === 1 ? '武器 · 首战可选择' : '武器 · 本轮已锁定', arena.x, view.weapons[0].y - 12, 12, colors.muted)
-  const selectedSkill = state.combatVersion === 2 ? skill(state.skill) : weaponSkill(state.weapon)
-  const skillProgress = state.combatVersion >= 5 ? state.player.combat.momentum >= momentum.max ? '待发' : Math.floor(state.player.combat.momentum / 100) : `${state.player.combat.attacks % 3}/3`
-  const skillLabel = prepare ? '武器技 ›' : `${selectedSkill.short} · ${skillProgress} ›`
-  const skillReady = !prepare && state.combatVersion >= 5 && state.player.combat.momentum >= momentum.max
-  headerButton(c, view.tactics, tactical ? skillLabel : '武器技 ›', { ...header,
-    fill: skillReady ? '#52412b' : '#354758', color: skillReady ? '#ffe3a2' : colors.gold,
-    stroke: skillReady ? colors.gold : '#a78b58', size: 11 })
+  drawTactics(c, view, state)
   weapons.forEach((weapon, i) => control(c, view.weapons[i], weapon.name,
     `${weaponSkill(weapon.id).short} · ${tactical && counters(weapon.id, state.enemy.weapon) ? '克制' : '自动'}`,
     state.weapon === weapon.id, prepare && state.round === 1))
   text(c, '战斗姿态 · 每战可调整', arena.x, view.stances[0].y - 12, 12, colors.muted)
   stances.forEach((stance, i) => control(c, view.stances[i], stance.name, stance.note, state.stance === stance.id, prepare))
-  if (view.log.h >= 20) {
-    const r = view.log
-    box(c, r, '#142337', 9, '#38516d')
-    if (prepare) {
-      text(c, stances.find(item => item.id === state.stance).description, r.x + 12, r.y + Math.min(16, r.h / 2), 12, colors.muted)
-      if (tactical && r.h >= 70) {
-        const match = relation(state.weapon, state.enemy.weapon)
-        const enemyWeapon = weapons.find(item => item.id === state.enemy.weapon).name
-        text(c, `对手持${enemyWeapon} · ${match.name}`, r.x + 12, r.y + 39, 12, match.disadvantaged ? colors.red : colors.blue)
-        text(c, `${selectedSkill.name} · 武势满100自动触发`, r.x + 12, r.y + 59, 11, colors.gold)
-      }
-    } else {
-      const end = Math.max(0, state.logs.length - logOffset)
-      const logs = state.logs.slice(Math.max(0, end - view.logPageSize), end)
-      if (view.logHeaderHeight) {
-        text(c, reviewing ? '战报 · 已暂停' : '交战战报', r.x + 12, r.y + 13, 11, colors.gold)
-        text(c, '下滑看更早记录', r.x + r.w - 12, r.y + 13, 10, colors.muted, 'right')
-      }
-      if (!logs.length) text(c, '尚未出招', r.x + 12, r.y + view.logHeaderHeight + 12, 14, colors.muted)
-      logs.forEach((event, index) => {
-        text(c, logText(event),
-          r.x + 12, r.y + view.logHeaderHeight + 12 + index * view.logLineHeight, 14, event.skill ? colors.gold : event.side === 'player' ? colors.blue : colors.red)
-      })
-      if (view.logFooterHeight) text(c, `最近 ${state.logs.length} 次出招 · ${Math.max(0, end - logs.length) + (logs.length ? 1 : 0)}–${end}`,
-        r.x + r.w / 2, r.y + r.h - 12, 10, colors.muted, 'center')
-    }
-  }
-  actionButton(c, view.action, prepare ? '开始交战  →' : state.status === 'fighting' ? reviewing ? '继续交战' : '暂停交战' : '查看战斗结果')
+  drawLog(c, view, state, { logOffset, reviewing })
+  const preparingChallenge = prepare && state.progression && state.round % 5 === 0
+  actionButton(c, view.action, prepare ? preparingChallenge ? '迎战强敌  →' : '开始交战  →' : state.status === 'fighting' ? reviewing ? '继续交战' : '暂停交战' : '查看战斗结果', true, preparingChallenge)
   if (saveFailed) text(c, '存档失败，当前进度仅保留在本次会话', width / 2, height - view.bottom - 4, 10, colors.red, 'center')
-  if (modal) drawModal(c, view, state, modal, best)
+  if (modal) drawModal(c, view, state, modal, best, upgradeArt, selectedUpgrade, pendingChoice)
 }
-function drawModal(c, view, state, modal, best) {
+function drawModal(c, view, state, modal, best, upgradeArt, selectedUpgrade, pendingChoice) {
   c.fillStyle = 'rgba(5,12,22,.78)'; c.fillRect(0, 0, view.width, view.height)
-  if (modal === 'growth') { drawGrowth(c, view, state); return }
+  if (modal === 'growth') { drawGrowth(c, view, state, upgradeArt, selectedUpgrade, pendingChoice); return }
   const guide = ['help', 'weapons', 'relations', 'momentum'].includes(modal)
   const r = guide ? view.guideDialog : view.dialog; const x = r.x + r.w / 2
   box(c, r, '#1c2d43', 16, '#8b846a')
@@ -250,7 +292,7 @@ function drawModal(c, view, state, modal, best) {
     const panels = attributePanels({ x: r.x + 14, y: r.y + 90, w: r.w - 28, h: 162 })
     if (result) {
       drawReport(c, panels, state)
-      const match = relation(state.weapon, state.enemy.weapon)
+      const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
       const own = weapons.find(item => item.id === state.weapon).name
       const enemy = weapons.find(item => item.id === state.enemy.weapon).name
       text(c, `${own} ${match.symbol} ${enemy} · ${match.name}`, x, r.y + 268, 12, match.disadvantaged ? colors.red : colors.gold, 'center')
@@ -279,29 +321,57 @@ function drawReport(c, panels, state) {
     })
   }
 }
-function drawGrowth(c, view, state) {
+function drawGrowth(c, view, state, upgradeArt, selectedUpgrade, pendingChoice) {
   const r = view.growthDialog; const x = r.x + r.w / 2
   box(c, r, gradient(c, r.x, r.y, r.w, r.h, ['#24394e', '#16273b']), 16, colors.gold)
-  text(c, '胜战修行', x, r.y + 30, 25, colors.gold, 'center', true)
-  text(c, `${state.streak} 连胜 · 选择一项强化`, x, r.y + 58, 14, colors.ink, 'center')
-  text(c, '仅本轮生效 · 武器固定 · 每五战迎强敌', x, r.y + 76, 11, colors.muted, 'center')
-  upgradeChoices(state).forEach((item, index) => {
-    const card = view.growthCards[index]
+  text(c, '胜战修行', x, r.y + 27, 25, colors.gold, 'center', true)
+  text(c, `${state.streak} 连胜 · 选中后确认强化`, x, r.y + 51, 14, colors.ink, 'center')
+  const policy = upgradeOdds(state)
+  if (state.progression.version < 5) text(c, '旧奖励保持原数值 · 下一战更新', x, r.y + 74, 11, colors.muted, 'center')
+  else if (policy.guaranteed) text(c, '强敌奖励 · 至少一项传说', x, r.y + 74, 13, '#ffca62', 'center', true)
+  else policy.qualities.forEach((quality, i) => text(c, `${quality.name} ${+quality.probability.toFixed(1)}%`,
+    r.x + 14 + (i + .5) * (r.w - 28) / policy.qualities.length, r.y + 74, 10, quality.color, 'center'))
+  const choices = upgradeChoices(state); const cards = growthCardRects(view, choices.length)
+  choices.forEach((item, index) => {
+    const card = cards[index]
     const key = item.id === 'hp' ? 'maxHp' : item.id
     const before = state.player.stats[key]; const after = upgradePreview(state, item.id)[key]
     const format = value => item.id === 'spd' ? `${value.toFixed(2)}/s` : ['crit', 'dodge'].includes(item.id) ? `${value.toFixed(1)}%` : value
-    box(c, card, gradient(c, card.x, card.y, card.w, card.h, ['#2e4357', '#203247']), 10, item.color)
+    box(c, card, gradient(c, card.x, card.y, card.w, card.h, [item.fill, '#203247']), 10, item.color)
+    if (pendingChoice === item.id) box(c, { x: card.x + 3, y: card.y + 3, w: card.w - 6, h: card.h - 6 }, null, 8, item.color)
     box(c, { x: card.x + 1, y: card.y + 16, w: 3, h: card.h - 32 }, item.color, 2)
-    text(c, item.name, card.x + 14, card.y + 20, 18, item.color, 'left', true)
+    drawUpgradeIcon(c, upgradeArt, item, { x: card.x + 10, y: card.y + 10, w: 38, h: 38 })
+    text(c, item.name, card.x + 56, card.y + 20, 18, item.color, 'left', true)
     const percent = ['crit', 'dodge'].includes(item.id)
-    const bonus = item.id === 'spd' ? `基础攻速 +${item.amount * 100}%` : `${item.label} +${percent ? +(after - before).toFixed(1) : item.amount}${percent ? '%' : ''}`
-    text(c, bonus, card.x + card.w - 14, card.y + 20, 13, colors.ink, 'right', true)
-    text(c, `${item.label}  ${format(before)} → ${format(after)}`, card.x + 14, card.y + 43, 13, colors.ink)
-    text(c, item.note, card.x + 14, card.y + 65, 11, colors.muted)
-    text(c, '›', card.x + card.w - 14, card.y + 53, 24, item.color, 'right')
+    const actualGain = +(after - before).toFixed(2)
+    const bonus = item.id === 'spd' ? state.progression.version >= 5 ? `攻速 +${actualGain}/s` : `基础攻速 +${Math.round(item.amount * 100)}%` : `${item.label} +${actualGain}${percent ? '%' : ''}`
+    text(c, item.qualityName, card.x + card.w - 12, card.y + 20, 12, item.color, 'right', true)
+    text(c, `${format(before)} → ${format(after)}`, card.x + 56, card.y + 43, 13, colors.ink)
+    text(c, bonus, card.x + 14, card.y + 62, 11, colors.muted)
+    const capped = actualGain < item.amount - .0001 && state.progression.version >= 5 || (percent && after - before < item.amount - .0001) || (item.id === 'spd' && after === 4)
+    text(c, pendingChoice === item.id ? '已选中 ✓' : capped ? '已到属性上限' : '选择 ›', card.x + card.w - 12, card.y + 62, 11, item.color, 'right')
   })
-  actionButton(c, view.growthHome, '游戏合集', false)
-  actionButton(c, view.growthRestart, '重新开始', false)
+  const owned = ownedUpgrades(state.progression)
+  text(c, '本轮已获强化', r.x + 14, r.y + 344, 12, colors.ink)
+  if (!owned.length) text(c, '首次修行，选择后开始积累', x, r.y + 378, 12, colors.muted, 'center')
+  owned.forEach((item, i) => {
+    const slot = view.growthOwned[i]
+    box(c, slot, selectedUpgrade === item.id ? '#354b60' : '#17283a', 6, item.color)
+    drawUpgradeIcon(c, upgradeArt, item, { x: slot.x + (slot.w - 28) / 2, y: slot.y + 1, w: 28, h: 28 })
+    text(c, `×${item.count}`, slot.x + slot.w / 2, slot.y + 34, 10, item.color, 'center')
+  })
+  const selected = owned.find(item => item.id === selectedUpgrade)
+  if (selected) {
+    text(c, `${selected.name} · 普通${selected.breakdown[0]} / 精良${selected.breakdown[1]}`, x, r.y + 408, 11, colors.muted, 'center')
+    text(c, `史诗${selected.breakdown[2]} / 传说${selected.breakdown[3]}`, x, r.y + 423, 11, colors.muted, 'center')
+  } else text(c, owned.length ? '图标按最高品质 · 点击查看数量' : '武器固定 · 强化仅本轮生效', x, r.y + 416, 11, colors.muted, 'center')
+  headerButton(c, view.growthHome, '游戏合集', { size: 10, color: colors.ink, fill: '#24394e', stroke: colors.line })
+  headerButton(c, view.growthRestart, '重新开始', { size: 11, color: colors.ink, fill: '#24394e', stroke: colors.line })
+  c.save(); if (!pendingChoice) c.globalAlpha = .45
+  headerButton(c, view.growthConfirm, pendingChoice ? '确认强化' : '先选择强化', {
+    size: 12, color: pendingChoice ? '#18283d' : colors.muted, fill: pendingChoice ? colors.gold : '#24394e', stroke: pendingChoice ? '#ffe1a4' : colors.line
+  })
+  c.restore()
 }
 function drawGuide(c, view, state, modal) {
   const r = view.guideDialog; const x = r.x + r.w / 2
@@ -312,15 +382,16 @@ function drawGuide(c, view, state, modal) {
     text(c, label, rect.x + rect.w / 2, rect.y + 15, 12, selected ? colors.gold : colors.ink, 'center', true)
   })
   if (modal === 'weapons') {
-    text(c, '双方武势满100，下次出招自动释放', x, r.y + 104, 12, colors.ink, 'center')
+    text(c, '武势满100施技，释放后可再次蓄满', x, r.y + 104, 12, colors.ink, 'center')
     weaponSkills.forEach((item, i) => {
       const selected = item.weapon === state.weapon
       const rect = { x: r.x + 12, y: r.y + 123 + i * 43, w: r.w - 24, h: 39 }
       box(c, rect, selected ? '#2b4053' : '#142337', 7, selected ? colors.gold : colors.line)
       text(c, `${weapons[i].name} · ${item.name}${selected ? ' · 当前' : ''}`, rect.x + 10, rect.y + 11, 13, selected ? colors.gold : colors.ink, 'left', true)
-      text(c, item.description, rect.x + 10, rect.y + 28, 12, colors.muted)
+      text(c, weaponSkill(item.weapon, state.combatVersion).description, rect.x + 10, rect.y + 28, 12, colors.muted)
     })
-    text(c, '伤害与受击蓄势 · 暴击+6 · 闪避+8', x, r.y + 398, 11, colors.muted, 'center')
+    text(c, state.combatVersion >= 8 ? '技能只作用于本次 · 护身留至下次受击' : state.combatVersion === 7 ?
+      '穿甲降低有效防御 · 护身使伤害减少25%' : '伤害与受击蓄势 · 暴击+6 · 闪避+8', x, r.y + 398, 11, colors.muted, 'center')
   } else if (modal === 'momentum') {
     text(c, '武势上限100，双方使用同一规则', x, r.y + 104, 12, colors.ink, 'center')
     const rows = [
@@ -338,8 +409,10 @@ function drawGuide(c, view, state, modal) {
     text(c, '满值后下次出招释放，清空后重新积攒', x, r.y + 366, 12, colors.gold, 'center')
     text(c, '技能也可蓄势 · 每战清零 · 暂停保留', x, r.y + 395, 11, colors.muted, 'center')
   } else if (modal === 'relations') {
-    text(c, '→ 专属克制：伤害 +18%', r.x + 14, r.y + 104, 12, colors.gold)
-    text(c, '← 被克制：敌方伤害 +18%', r.x + 14, r.y + 125, 12, colors.red)
+    const bonus = Math.round((relation('sword', 'dual', state.combatVersion, state.progression ? state.progression.version : 1).scale - 1) * 100)
+    const boosted = state.combatVersion >= 7 ? '攻击' : '伤害'
+    text(c, `→ 专属克制：${boosted} +${bonus}%`, r.x + 14, r.y + 104, 12, colors.gold)
+    text(c, `← 被克制：敌方${boosted} +${bonus}%`, r.x + 14, r.y + 125, 12, colors.red)
     text(c, '= 势均力敌：双方无克制加成', r.x + 14, r.y + 146, 12, colors.blue)
     const left = r.x + 12; const labelW = 48; const cellW = (r.w - 24 - labelW) / 6
     text(c, '我 / 敌', left + labelW / 2, r.y + 171, 10, colors.muted, 'center')
@@ -350,7 +423,7 @@ function drawGuide(c, view, state, modal) {
       box(c, { x: left, y, w: r.w - 24, h: 27 }, weapon.id === state.weapon ? '#2b4053' : '#142337', 4)
       text(c, weapon.name, left + labelW / 2, y + 13, 12, weapon.id === state.weapon ? colors.gold : colors.ink, 'center')
       weapons.forEach((enemy, col) => {
-        const match = relation(weapon.id, enemy.id)
+        const match = relation(weapon.id, enemy.id, state.combatVersion, state.progression ? state.progression.version : 1)
         const cellX = left + labelW + cellW * col
         if (weapon.id === state.weapon && enemy.id === state.enemy.weapon) box(c, { x: cellX + 3, y: y + 2, w: cellW - 6, h: 23 }, null, 4, colors.gold)
         text(c, match.symbol, cellX + cellW / 2, y + 13, 17, match.counter ? colors.gold : match.disadvantaged ? colors.red : colors.blue, 'center', true)
@@ -358,16 +431,27 @@ function drawGuide(c, view, state, modal) {
     })
     text(c, '每种武器克一种、被一种克制', x, r.y + 391, 12, colors.muted, 'center')
   } else {
-    const lines = ['① 首战选武器，每战可调整战斗姿态。', '② 武势满100自动释放武器技能。', '③ 胜利后三选一强化，仅本轮生效。', '④ 对手逐步变强，每五战迎接强敌。']
+    const lines = state.combatVersion >= 7 ? [
+      '① 先判闪避；暴击将攻击提高至1.8倍。',
+      state.combatVersion >= 8 ? '② 命中伤害＝攻击－防御，最低1。' : '② 命中伤害＝攻击－有效防御，最低1。',
+      '③ 武势满100自动施技；胜战选择强化。',
+      state.combatVersion >= 10 ? '④ 四战对初始属性；第五战对成长属性。' : '④ 首战选武器，每战可调整战斗姿态。'
+    ] : ['① 首战选武器，每战可调整战斗姿态。', '② 武势满100自动释放武器技能。', '③ 胜利后三选一强化，仅本轮生效。', '④ 对手逐步变强，每五战迎接强敌。']
     lines.forEach((value, i) => text(c, value, r.x + 14, r.y + 108 + i * 24, 12, colors.ink))
     drawAttributes(c, attributePanels({ x: r.x + 12, y: r.y + 202, w: r.w - 24, h: 146 }), state)
-    const match = relation(state.weapon, state.enemy.weapon)
+    const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
     text(c, `${match.symbol} 当前对局：${match.name}`, x, r.y + 369, 12, match.disadvantaged ? colors.red : colors.gold, 'center')
     text(c, state.status === 'prepare' ? '敌方数值在开战后揭示' : '阅读指南期间，战斗暂停', x, r.y + 394, 12, colors.muted, 'center')
   }
   if (state.combatVersion < 5) {
     // Old fights resume unchanged, but the guide describes the next battle's rules.
     text(c, '旧战斗保留原规则；下一战启用武势', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion < 8) {
+    text(c, '当前沿用旧伤害规则；下一战更新', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion === 8) {
+    text(c, '当前沿用原属性；下一战更新初始速率', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion === 9) {
+    text(c, '当前沿用原成长；下一战启用五战循环', x, r.y + 15, 10, colors.muted, 'center')
   }
 }
 module.exports = { draw, drawCombatFrame, drawCover }

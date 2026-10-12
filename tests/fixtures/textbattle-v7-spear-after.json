@@ -1,0 +1,227 @@
+{
+  "version": 5,
+  "combatVersion": 7,
+  "runId": 79,
+  "rng": 723867855,
+  "round": 8,
+  "streak": 7,
+  "status": "fighting",
+  "weapon": "spear",
+  "stance": "guard",
+  "elapsedMs": 4500,
+  "logs": [
+    {
+      "side": "player",
+      "damage": 20,
+      "critical": false,
+      "dodged": false,
+      "time": 830,
+      "skill": "spear-thrust",
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 19,
+      "critical": false,
+      "dodged": false,
+      "time": 891,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 31,
+      "critical": true,
+      "dodged": false,
+      "time": 1661,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 19,
+      "critical": false,
+      "dodged": false,
+      "time": 1783,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 2491,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 2674,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 31,
+      "critical": true,
+      "dodged": false,
+      "time": 3321,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 19,
+      "critical": false,
+      "dodged": false,
+      "time": 3565,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "player",
+      "damage": 15,
+      "critical": false,
+      "dodged": false,
+      "time": 4152,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 4457,
+      "counter": false,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 4,
+    "counts": {
+      "atk": 0,
+      "hp": 3,
+      "def": 2,
+      "spd": 1,
+      "crit": 0,
+      "dodge": 1
+    },
+    "qualities": {
+      "normal": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 1,
+        "crit": 0,
+        "dodge": 1
+      },
+      "fine": {
+        "atk": 0,
+        "hp": 1,
+        "def": 2,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "epic": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "legendary": {
+        "atk": 0,
+        "hp": 0,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      }
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 97,
+      "criticals": 2,
+      "dodges": 2,
+      "skills": 1,
+      "attacks": 5
+    },
+    "enemy": {
+      "damage": 57,
+      "criticals": 0,
+      "dodges": 1,
+      "skills": 0,
+      "attacks": 5
+    }
+  },
+  "player": {
+    "name": "沈雪渡",
+    "gender": "male",
+    "base": {
+      "maxHp": 220,
+      "atk": 17,
+      "def": 6,
+      "crit": 20.347894163980424,
+      "dodge": 16.098994807159727,
+      "spd": 1.1816531087653068
+    },
+    "stats": {
+      "maxHp": 274,
+      "atk": 20,
+      "def": 14,
+      "spd": 1.2043408484536007,
+      "crit": 23.347894163980424,
+      "dodge": 23.098994807159727,
+      "pierce": 0.2
+    },
+    "hp": 217,
+    "cooldown": 481.9783225854444,
+    "combat": {
+      "attacks": 5,
+      "hitsTaken": 3,
+      "ward": false,
+      "momentum": 10000
+    }
+  },
+  "enemy": {
+    "name": "西门吹鳕",
+    "gender": "male",
+    "weapon": "spear",
+    "base": {
+      "maxHp": 216,
+      "atk": 18,
+      "def": 7,
+      "crit": 16.359430652036224,
+      "dodge": 15.68759344120932,
+      "spd": 1.144777245075917
+    },
+    "stats": {
+      "maxHp": 248,
+      "atk": 30,
+      "def": 6,
+      "spd": 1.1218817001743986,
+      "crit": 19.359430652036224,
+      "dodge": 15.68759344120932,
+      "pierce": 0.2
+    },
+    "hp": 151,
+    "cooldown": 848.1574742392972,
+    "combat": {
+      "attacks": 5,
+      "hitsTaken": 4,
+      "ward": false,
+      "momentum": 8429
+    }
+  }
+}

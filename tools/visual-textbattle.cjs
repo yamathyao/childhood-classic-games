@@ -9,7 +9,8 @@ async function main() {
   const output = path.resolve(__dirname, '../tmp/qa-textbattle')
   fs.mkdirSync(output, { recursive: true })
   const preview = path.join(output, 'preview.html')
-  const images = { 'assets/textbattle/fighters-2d.png': 'data:image/png;base64,' + fs.readFileSync(path.resolve(__dirname, '../assets/textbattle/fighters-2d.png')).toString('base64') }
+  const images = Object.fromEntries(['fighters-2d.png', 'upgrade-icons.png'].map(name => [
+    `assets/textbattle/${name}`, 'data:image/png;base64,' + fs.readFileSync(path.resolve(__dirname, '../assets/textbattle', name)).toString('base64')]))
   fs.writeFileSync(preview, '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>文字对战 · 本地验收</title><style>html,body{margin:0;overflow:hidden}canvas{width:100vw;height:100vh;touch-action:none;display:block}</style><canvas></canvas><script>(' + browserBoot.toString() + ')(' + JSON.stringify({ modules, images }).replace(/</g, '\\u003c') + ')</script>')
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_EXECUTABLE || undefined })
   try {
@@ -50,7 +51,7 @@ async function main() {
       await click('文字对战')
       await page.screenshot({ path: path.join(output, `detail-${width}.png`) })
       await click('进入游戏')
-      const genderRect = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).gender)
+      const genderRect = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), true).gender)
       await page.mouse.click(genderRect.x + genderRect.w / 2, genderRect.y + genderRect.h / 2)
       assert.equal(await page.evaluate(() => wx.getStorageSync('textbattle.v5').player.gender), 'female')
       await page.screenshot({ path: path.join(output, `female-${width}.png`) })
@@ -68,7 +69,7 @@ async function main() {
       await page.evaluate(() => qa.emit('KeyboardConfirm', { value: '江湖第一剑客长名' }))
       assert.equal(await page.evaluate(() => wx.getStorageSync('textbattle.v5').player.name), '江湖第一剑客长名')
       assert.ok(await page.evaluate(() => {
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         const title = qa.drawn.find(item => item.text === '江湖第一剑客长名' && item.y === view.arena.y + 31)
         return title && title.x - title.width / 2 >= view.arena.x + 12 && title.x + title.width / 2 < view.gender.x
       }))
@@ -95,9 +96,9 @@ async function main() {
       await page.evaluate(() => qa.emit('KeyboardConfirm', { value: '江湖第一剑客长名' }))
       const selectWeapon = async id => {
         const weaponRect = await page.evaluate(value => {
-          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
           const index = qa.load('games/textbattle/rules.js').weapons.findIndex(item => item.id === value)
-          return view.weapons[index]
+          return qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').weapons[index]
         }, id)
         await page.mouse.click(weaponRect.x + weaponRect.w / 2, weaponRect.y + weaponRect.h / 2)
       }
@@ -105,7 +106,7 @@ async function main() {
         await selectWeapon(id)
         assert.equal(await page.evaluate(() => wx.getStorageSync('textbattle.v5').weapon), id)
         const panels = await page.evaluate(() => {
-          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), true)
           return Object.values(view.attributes).map(rect => qa.texts.filter(item => item.x > rect.x && item.x < rect.x + rect.w && item.y > rect.y && item.y < rect.y + rect.h).map(item => item.text))
         })
         assert.equal(panels.length, 2)
@@ -116,6 +117,13 @@ async function main() {
         assert.equal(panels[1].filter(value => value === '？').length, 6)
         assert.ok(panels[1].includes('武势 0'))
         assert.ok(!panels[1].filter(value => !value.startsWith('武势 ')).some(value => /\d/.test(value)))
+        assert.ok(await page.evaluate(value => {
+          const rules = qa.load('games/textbattle/rules.js')
+          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), true)
+          const ability = rules.weaponSkill(value)
+          const lines = qa.drawn.filter(item => item.text === ability.description || item.text === `${ability.name} · 武势满100自动触发` || item.text.startsWith('守御：'))
+          return lines.length === 3 && lines.every(item => item.x >= view.log.x && item.x + item.width <= view.log.x + view.log.w - 8 && item.y - 6 >= view.log.y && item.y + 6 < view.action.y)
+        }, id))
         await page.screenshot({ path: path.join(output, `weapon-${id}-${width}.png`) })
       }
       await selectWeapon('saber')
@@ -130,16 +138,17 @@ async function main() {
       assert.ok(await page.evaluate(() => qa.texts.some(item => item.text === '玩法指南')))
       await page.screenshot({ path: path.join(output, `skills-${width}.png`) })
       assert.ok(await page.evaluate(() => {
-        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).guideDialog
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
         const descriptions = qa.load('games/textbattle/rules.js').weaponSkills.map(item => item.description)
-        const drawn = qa.drawn.filter(item => descriptions.includes(item.text))
+        const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
+        const drawn = qa.drawn.slice(start).filter(item => descriptions.includes(item.text))
         return drawn.length === 6 && drawn.every(item => item.font.includes('12px') && item.x + item.width <= r.x + r.w - 12)
       }))
       await click('克制图谱')
       assert.ok(await page.evaluate(() => qa.drawn.filter(item => item.text === '→').length === 6 && qa.drawn.filter(item => item.text === '←').length === 6 && qa.drawn.filter(item => item.text === '=').length === 24))
       assert.ok(await page.evaluate(() => {
         const rules = qa.load('games/textbattle/rules.js')
-        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).guideDialog
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
         const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
         const rows = qa.drawn.slice(start).filter(item => item.y >= r.y && item.y < r.y + r.h)
         return !rows.some(item => /刀客|卫士|刺客|力士|铁壁|影袭/.test(item.text)) &&
@@ -153,7 +162,7 @@ async function main() {
       await page.screenshot({ path: path.join(output, `relations-${width}.png`) })
       await click('武势机制')
       assert.ok(await page.evaluate(() => {
-        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).guideDialog
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
         const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
         const rows = qa.drawn.slice(start).filter(item => item.y >= r.y && item.y < r.y + r.h)
         return rows.some(item => item.text.includes('+1.6武势')) && rows.some(item => item.text.includes('+1.1武势')) &&
@@ -165,11 +174,18 @@ async function main() {
       }))
       assert.deepEqual(await page.evaluate(() => wx.getStorageSync('textbattle.v5')), beforeGuide)
       await page.screenshot({ path: path.join(output, `momentum-guide-${width}.png`) })
-      await click('基础玩法'); await page.screenshot({ path: path.join(output, `help-${width}.png`) })
+      await click('基础玩法')
+      assert.ok(await page.evaluate(() => {
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
+        const lines = qa.drawn.filter(item => /^[①②③④]/.test(item.text))
+        return lines.length === 4 && lines.some(item => item.text.includes('攻击－防御')) &&
+          lines.every(item => item.x >= r.x + 12 && item.x + item.width <= r.x + r.w - 12)
+      }))
+      await page.screenshot({ path: path.join(output, `help-${width}.png`) })
       await click('知道了')
       await click('强攻')
       assert.ok(await page.evaluate(() => {
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         const lastWeapon = view.weapons[5]
         return view.stances[0].y - lastWeapon.y - lastWeapon.h >= 26 &&
           view.log.h >= 20 && view.log.y >= view.stances[0].y + view.stances[0].h + 8 &&
@@ -200,12 +216,12 @@ async function main() {
       await click('继续交战'); await click('暂停交战')
       assert.ok(await page.evaluate(() => {
         const rows = qa.drawn.filter(item => /^\d+\.\d+s/.test(item.text))
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         return rows.length > 0 && rows.every(item => item.font.includes('14px') &&
           item.x + item.width <= view.log.x + view.log.w - 12 && item.y + 7 <= view.log.y + view.log.h)
       }))
       await page.screenshot({ path: path.join(output, `log-${width}.png`) })
-      const tactics = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).tactics)
+      const tactics = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').tactics)
       await page.mouse.click(tactics.x + tactics.w / 2, tactics.y + tactics.h / 2)
       const lockedWeapon = await page.evaluate(() => wx.getStorageSync('textbattle.v5').weapon)
       await click('克制图谱'); await click('武器技能')
@@ -231,8 +247,11 @@ async function main() {
       await click('查看战斗结果'); await click('下一战')
       assert.ok(await page.evaluate(() => wx.getStorageSync('textbattle.v5').progression.pending))
       await page.screenshot({ path: path.join(output, `growth-${width}.png`) })
-      const growthCard = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).growthCards[0])
+      const growthCard = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').growthCards[0])
       await page.mouse.click(growthCard.x + growthCard.w / 2, growthCard.y + growthCard.h / 2)
+      assert.ok(await page.evaluate(() => wx.getStorageSync('textbattle.v5').progression.pending))
+      await page.screenshot({ path: path.join(output, `growth-selected-${width}.png`) })
+      await click('确认强化')
       const next = await page.evaluate(() => wx.getStorageSync('textbattle.v5'))
       assert.equal(next.progression.pending, false)
       assert.equal(next.round, 2); assert.equal(next.player.hp, next.player.stats.maxHp)
@@ -245,7 +264,7 @@ async function main() {
       await click('新挑战'); await click('取消')
       await page.evaluate(() => {
         const c = document.querySelector('canvas').getContext('2d')
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         for (const [key, label, size] of [['home', '‹ 游戏合集', 12], ['restart', '重新开始', 11], ['info', '玩法', 12], ['pause', '记录', 12]]) {
           c.font = `600 ${size}px serif`
           if (c.measureText(label).width > view[key].w - 8) throw new Error('Header label overflow: ' + label)
@@ -258,7 +277,7 @@ async function main() {
       assert.equal(await page.evaluate(() => wx.getStorageSync('textbattle.v5').round), 2)
       await click('重新开始')
       const restartConfirm = await page.evaluate(() => {
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         return { x: view.modalPrimary.x + view.modalPrimary.w / 2, y: view.modalPrimary.y + view.modalPrimary.h / 2 }
       })
       await page.mouse.click(restartConfirm.x, restartConfirm.y)
@@ -295,7 +314,7 @@ async function main() {
       })
       await swipeHome(); await click('文字对战'); await click('继续挑战'); await click('继续交战'); await click('暂停交战')
       const scrollLog = async delta => page.evaluate(distance => {
-        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure()).log
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').log
         const t = { clientX: r.x + r.w / 2, clientY: r.y + r.h / 2, identifier: 9 }
         qa.emit('TouchStart', { changedTouches: [t], touches: [t] })
         const moved = { ...t, clientY: t.clientY + distance }
@@ -305,7 +324,7 @@ async function main() {
       await scrollLog(3000)
       assert.ok(await page.evaluate(() => {
         const rows = qa.drawn.filter(item => /^\d+\.\d+s/.test(item.text))
-        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+        const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare')
         return rows.length === view.logPageSize && rows[0].text.startsWith('0.0s')
       }))
       await page.screenshot({ path: path.join(output, `log-oldest-${width}.png`) })
@@ -316,6 +335,62 @@ async function main() {
       }))
       await page.screenshot({ path: path.join(output, `log-newest-${width}.png`) })
       await click('继续交战'); await click('游戏合集')
+      // A guaranteed legendary reward, epic candidate and all six acquired types.
+      await page.evaluate(() => {
+        const rules = qa.load('games/textbattle/rules.js')
+        for (let seed = 1; seed <= 2000; seed++) {
+          const state = rules.initialState(seed)
+          for (let round = 1; round < 20; round++) {
+            state.status = 'won'; state.enemy.hp = 0; state.streak = state.round; rules.nextRound(state)
+            const choice = rules.upgradeChoices(state).sort((a, b) => state.progression.counts[a.id] - state.progression.counts[b.id])[0]
+            rules.chooseUpgrade(state, choice.id)
+          }
+          state.status = 'won'; state.enemy.hp = 0; state.streak = state.round; rules.nextRound(state)
+          const options = rules.upgradeChoices(state)
+          if (new Set(options.map(item => item.quality)).size === 3 && options.some(item => item.quality === 'legendary') &&
+            options.some(item => item.quality === 'epic') && rules.ownedUpgrades(state.progression).length === 6) {
+            if (!rules.restore(rules.snapshot(state))) throw new Error('Invalid quality fixture')
+            wx.setStorageSync(rules.saveKey, rules.snapshot(state)); return
+          }
+        }
+        throw new Error('Missing quality seed')
+      })
+      await swipeHome(); await click('文字对战'); await click('继续挑战')
+      await page.waitForFunction(() => qa.texts.some(item => item.text === '史诗'))
+      await page.waitForTimeout(100)
+      const qualityBounds = await page.evaluate(() => {
+        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').growthDialog
+        const labels = qa.drawn.filter(item => ['普通', '精良', '史诗', '传说', '强敌奖励 · 至少一项传说', '本轮已获强化'].includes(item.text))
+        const fits = item => {
+          const left = item.align === 'right' ? item.x - item.width : item.align === 'center' ? item.x - item.width / 2 : item.x
+          return left > r.x && left + item.width < r.x + r.w && item.y > r.y && item.y < r.y + r.h
+        }
+        return { labels, valid: labels.length === 5 && labels.every(fits) }
+      })
+      assert.ok(qualityBounds.valid, JSON.stringify(qualityBounds))
+      await page.screenshot({ path: path.join(output, `qualities-${width}.png`) })
+      const ownedRect = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').growthOwned[0])
+      const beforeOwned = await page.evaluate(() => wx.getStorageSync('textbattle.v5'))
+      await page.mouse.click(ownedRect.x + ownedRect.w / 2, ownedRect.y + ownedRect.h / 2)
+      assert.deepEqual(await page.evaluate(() => wx.getStorageSync('textbattle.v5')), beforeOwned)
+      assert.ok(await page.evaluate(() => qa.texts.some(item => /普通\d+ \/ 精良\d+/.test(item.text)) &&
+        qa.texts.some(item => /史诗\d+ \/ 传说\d+/.test(item.text))))
+      await page.screenshot({ path: path.join(output, `owned-upgrades-${width}.png`) })
+      const legendaryRect = await page.evaluate(() => {
+        const rules = qa.load('games/textbattle/rules.js')
+        const state = wx.getStorageSync(rules.saveKey)
+        const index = rules.upgradeChoices(state).findIndex(item => item.quality === 'legendary')
+        return qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').growthCards[index]
+      })
+      await page.mouse.click(legendaryRect.x + legendaryRect.w / 2, legendaryRect.y + legendaryRect.h / 2)
+      assert.deepEqual(await page.evaluate(() => wx.getStorageSync('textbattle.v5')), beforeOwned)
+      await page.screenshot({ path: path.join(output, `legendary-selected-${width}.png`) })
+      await click('确认强化')
+      assert.ok(await page.evaluate(() => {
+        const growth = wx.getStorageSync('textbattle.v5').progression
+        return !growth.pending && Object.values(growth.qualities.legendary).some(count => count > 0)
+      }))
+      await click('游戏合集')
       }
       // Deterministic render fixtures inspect every skill at the same phase.
       // The live scene is now idle in the collection; no combat timer is used.
@@ -324,6 +399,90 @@ async function main() {
         await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = 'assets/textbattle/fighters-2d.png' })
         qa.feedbackArt = { image }
       })
+      // Compare incremental combat frames with a fresh full render, including
+      // skill spending, ward removal and charge easing at identical timestamps.
+      const pixelChecks = await page.evaluate(() => {
+        const rules = qa.load('games/textbattle/rules.js')
+        const visual = qa.load('games/textbattle/feedback.js')
+        const renderer = qa.load('games/textbattle/renderer.js')
+        const screen = qa.load('common/screen.js').measure()
+        const view = qa.load('games/textbattle/layout.js').layout(screen)
+        const canvas = document.querySelector('canvas'); const c = canvas.getContext('2d')
+        const reference = document.createElement('canvas'); reference.width = canvas.width; reference.height = canvas.height
+        const expectedContext = reference.getContext('2d'); expectedContext.scale(screen.dpr, screen.dpr)
+        const state = rules.initialState(42); rules.configure(state, 'weapon', 'halberd'); rules.startFight(state)
+        state.player.combat.momentum = 10000; state.enemy.combat.ward = true
+        state.player.cooldown = 100; state.enemy.cooldown = 500
+        const feedback = visual.createFeedback(state, 0)
+        const options = { modal: null, best: [], feedback, now: 0, art: qa.feedbackArt }
+        renderer.draw(c, view, state, options)
+        let previous = 0
+        return [100, 220, 400, 500, 720, 1000].map(now => {
+          const events = rules.tick(state, now - previous); previous = now
+          visual.recordEvents(feedback, state, events, now); options.now = now
+          renderer.drawCombatFrame(c, view, state, options, events.length > 0)
+          const actual = c.getImageData(0, 0, canvas.width, canvas.height).data
+          renderer.draw(expectedContext, view, state, options)
+          const expected = expectedContext.getImageData(0, 0, canvas.width, canvas.height).data
+          let error = 0; let different = 0
+          for (let i = 0; i < actual.length; i += 4) {
+            let pixel = 0
+            for (let channel = 0; channel < 3; channel++) pixel += Math.abs(actual[i + channel] - expected[i + channel])
+            error += pixel; if (pixel > 24) different++
+          }
+          let attributeError = 0; let attributeChannels = 0
+          for (const rect of Object.values(view.attributes)) {
+            for (let y = Math.ceil((rect.y + 36) * screen.dpr); y < (rect.y + rect.h - 5) * screen.dpr; y++) {
+              for (let x = Math.ceil((rect.x + 5) * screen.dpr); x < (rect.x + rect.w - 5) * screen.dpr; x++) {
+                const index = (y * canvas.width + x) * 4
+                for (let channel = 0; channel < 3; channel++) { attributeError += Math.abs(actual[index + channel] - expected[index + channel]); attributeChannels++ }
+              }
+            }
+          }
+          return { now, meanError: error / (actual.length / 4 * 3), differentFraction: different / (actual.length / 4), attributeError: attributeError / attributeChannels }
+        })
+      })
+      assert.ok(pixelChecks.every(check => check.meanError < .3 && check.differentFraction < .005 && check.attributeError < .01), JSON.stringify(pixelChecks))
+      await page.screenshot({ path: path.join(output, `incremental-combat-${width}.png`) })
+      // Check the challenge notice at cycle boundaries without starting timers.
+      for (const round of [4, 5, 6, 10, 15]) {
+        const check = await page.evaluate(target => {
+          const rules = qa.load('games/textbattle/rules.js')
+          const state = rules.initialState(42)
+          while (state.round < target) {
+            state.status = 'won'; state.streak = state.round
+            rules.nextRound(state)
+            rules.chooseUpgrade(state, rules.upgradeChoices(state)[0].id)
+          }
+          rules.configure(state, 'stance', 'agile')
+          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), true)
+          const draw = () => qa.load('games/textbattle/renderer.js').draw(document.querySelector('canvas').getContext('2d'), view, state,
+            { modal: null, best: [], now: 0, art: qa.feedbackArt })
+          draw()
+          qa.challengeFixture = { state, view }
+          const badge = qa.drawn.find(item => item.text === `第 ${target} 战 · 强敌挑战`)
+          const action = qa.drawn.find(item => item.text === '迎战强敌  →')
+          const concealed = qa.drawn.filter(item => item.text === '？').length === 6
+          const stance = qa.drawn.find(item => item.text.startsWith('游斗：'))
+          return { challenge: !!badge, action: !!action, concealed,
+            fits: stance && stance.x + stance.width <= view.log.x + view.log.w - 8 && stance.y + 6 < view.action.y &&
+              (!badge || badge.x - badge.width / 2 >= view.width / 2 - 70 &&
+              badge.x + badge.width / 2 <= view.width / 2 + 70 && badge.y + 9 <= view.gender.y - 1) }
+        }, round)
+        assert.equal(check.challenge, round % 5 === 0)
+        assert.equal(check.action, round % 5 === 0)
+        assert.ok(check.concealed && check.fits, JSON.stringify(check))
+        if (round === 5) await page.screenshot({ path: path.join(output, `challenge-prepare-${width}.png`) })
+        if (round === 6) await page.screenshot({ path: path.join(output, `ordinary-prepare-${width}.png`) })
+        await page.evaluate(() => {
+          const { state } = qa.challengeFixture
+          const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+          const rules = qa.load('games/textbattle/rules.js'); rules.startFight(state)
+          qa.load('games/textbattle/renderer.js').draw(document.querySelector('canvas').getContext('2d'), view, state,
+            { modal: null, best: [], now: 0, art: qa.feedbackArt })
+        })
+        assert.ok(await page.evaluate(() => !qa.drawn.some(item => item.text.includes('强敌挑战') || item.text === '迎战强敌  →')))
+      }
       for (const weapon of ['sword', 'saber', 'spear', 'dual', 'axe', 'halberd']) {
         await page.evaluate(id => {
           const rules = qa.load('games/textbattle/rules.js')

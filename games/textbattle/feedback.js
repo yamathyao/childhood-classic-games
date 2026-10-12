@@ -25,14 +25,20 @@ function meterValue(meter, now) {
   return meter.from + (meter.to - meter.from) * (1 - (1 - progress) ** 3)
 }
 function recordEvents(feedback, state, events, now) {
-  feedback.effects = feedback.effects.filter(event => now - event.at < lifetime)
+  // The list is bounded to six entries; prune in place instead of allocating
+  // replacement arrays at every presentation tick between attacks.
+  const effects = feedback.effects
+  let retained = 0
+  for (const event of effects) if (now - event.at < lifetime) effects[retained++] = event
+  effects.length = retained
+  if (!events.length && charge(state.player) === feedback.meters.player.to && charge(state.enemy) === feedback.meters.enemy.to) return
   for (const event of events) {
     // A delayed callback may settle several attacks. Do not replay old hits.
     const at = now - Math.max(0, state.elapsedMs - event.time)
-    if (now - at < lifetime) feedback.effects.push({ ...event, at,
+    if (now - at < lifetime) effects.push({ ...event, at,
       weapon: event.side === 'player' ? state.weapon : state.enemy.weapon })
   }
-  feedback.effects = feedback.effects.slice(-6)
+  if (effects.length > 6) effects.splice(0, effects.length - 6)
   for (const side of ['player', 'enemy']) {
     const meter = feedback.meters[side]; const value = charge(state[side])
     const spent = events.some(event => event.side === side && event.skill)
@@ -46,8 +52,11 @@ function recordEvents(feedback, state, events, now) {
 }
 function isAnimating(feedback, now) {
   return feedback.effects.some(event => now - event.at < lifetime) ||
-    Object.values(feedback.meters).some(meter => (meter.from !== meter.to && now - meter.at < meterDuration) ||
-      (meter.readyAt !== null && now - meter.readyAt < readyDuration))
+    meterAnimating(feedback.meters.player, now) || meterAnimating(feedback.meters.enemy, now)
+}
+function meterAnimating(meter, now) {
+  return (meter.from !== meter.to && now - meter.at < meterDuration) ||
+    (meter.readyAt !== null && now - meter.readyAt < readyDuration)
 }
 function impulse(age, duration) {
   const p = age / duration

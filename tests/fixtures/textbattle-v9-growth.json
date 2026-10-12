@@ -1,0 +1,154 @@
+{
+  "version": 5,
+  "combatVersion": 9,
+  "runId": 91,
+  "rng": 301015443,
+  "round": 6,
+  "streak": 5,
+  "status": "fighting",
+  "weapon": "saber",
+  "stance": "guard",
+  "elapsedMs": 1500,
+  "logs": [
+    {
+      "side": "player",
+      "damage": 21,
+      "critical": false,
+      "dodged": false,
+      "time": 1301,
+      "counter": false,
+      "guarded": false
+    },
+    {
+      "side": "enemy",
+      "damage": 0,
+      "critical": false,
+      "dodged": true,
+      "time": 1346,
+      "counter": false,
+      "guarded": false
+    }
+  ],
+  "progression": {
+    "version": 4,
+    "counts": {
+      "atk": 0,
+      "hp": 2,
+      "def": 2,
+      "spd": 0,
+      "crit": 1,
+      "dodge": 0
+    },
+    "qualities": {
+      "normal": {
+        "atk": 0,
+        "hp": 0,
+        "def": 1,
+        "spd": 0,
+        "crit": 1,
+        "dodge": 0
+      },
+      "fine": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "epic": {
+        "atk": 0,
+        "hp": 0,
+        "def": 1,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      },
+      "legendary": {
+        "atk": 0,
+        "hp": 1,
+        "def": 0,
+        "spd": 0,
+        "crit": 0,
+        "dodge": 0
+      }
+    },
+    "pending": false
+  },
+  "report": {
+    "complete": true,
+    "player": {
+      "damage": 21,
+      "criticals": 0,
+      "dodges": 1,
+      "skills": 0,
+      "attacks": 1
+    },
+    "enemy": {
+      "damage": 0,
+      "criticals": 0,
+      "dodges": 0,
+      "skills": 0,
+      "attacks": 1
+    }
+  },
+  "player": {
+    "name": "沈鹤隐",
+    "gender": "male",
+    "base": {
+      "maxHp": 223,
+      "atk": 19,
+      "def": 7,
+      "crit": 6.709247695240481,
+      "dodge": 6.1556333805539944,
+      "spd": 0.9375389318784415
+    },
+    "stats": {
+      "maxHp": 277,
+      "atk": 26,
+      "def": 16,
+      "spd": 0.768781924140322,
+      "crit": 12.709247695240482,
+      "dodge": 7.1556333805539944,
+      "pierce": 0
+    },
+    "hp": 277,
+    "cooldown": 1101.5179821461957,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 0,
+      "ward": false,
+      "momentum": 2218
+    }
+  },
+  "enemy": {
+    "name": "莲星",
+    "gender": "female",
+    "weapon": "axe",
+    "base": {
+      "maxHp": 215,
+      "atk": 16,
+      "def": 6,
+      "crit": 7.055374248488485,
+      "dodge": 6.926729853747471,
+      "spd": 0.8739207059477588
+    },
+    "stats": {
+      "maxHp": 237,
+      "atk": 29,
+      "def": 5,
+      "spd": 0.742832600055595,
+      "crit": 7.055374248488485,
+      "dodge": 6.926729853747471,
+      "pierce": 0
+    },
+    "hp": 216,
+    "cooldown": 1192.3966447491885,
+    "combat": {
+      "attacks": 1,
+      "hitsTaken": 1,
+      "ward": false,
+      "momentum": 975
+    }
+  }
+}
