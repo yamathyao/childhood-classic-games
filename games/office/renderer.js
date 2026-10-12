@@ -83,17 +83,19 @@ function addBin(c, project, items) {
   const right = ringPoint(0, BIN.height, BIN.radius)
   const bottom = project({ x: BIN.x, y: BIN.bottom, z: BIN.z })
   const top = project({ x: BIN.x, y: BIN.height, z: BIN.z })
+  const openingFill = shade(c, top.x, top.y - 8, top.x, top.y + 9,
+    [[0, '#353535'], [.55, '#777'], [1, '#b4b4b4']])
+  const bodyFill = shade(c, left.x, top.y, right.x, bottom.y,
+    [[0, '#aaa'], [.22, '#e0e0e0'], [.53, '#fcfcfc'], [.78, '#e6e6e6'], [1, '#969696']])
+  const lip = arc(BIN.height - .035, BIN.radius - .006, Math.PI, Math.PI * 2)
   // The dark opening sits behind the retained contents; the solid front wall
   // then masks them below the rim, including balls nearest the viewer.
   items.push({ depth: project({ x: BIN.x, y: BIN.height, z: BIN.z + BIN.radius + .15 }).depth,
-    paint: () => poly(c, opening, shade(c, top.x, top.y - 8, top.x, top.y + 9,
-      [[0, '#353535'], [.55, '#777'], [1, '#b4b4b4']]), INK, 1.6) })
+    paint: () => poly(c, opening, openingFill, INK, 1.6) })
   items.push({ depth: project({ x: BIN.x, y: (BIN.bottom + BIN.height) / 2, z: BIN.z - BIN.radius * .55 }).depth,
     paint: () => {
-      poly(c, body, shade(c, left.x, top.y, right.x, bottom.y,
-        [[0, '#aaa'], [.22, '#e0e0e0'], [.53, '#fcfcfc'], [.78, '#e6e6e6'], [1, '#969696']]), INK, 1.6)
+      poly(c, body, bodyFill, INK, 1.6)
       poly(c, topFront, null, INK, 2.2, false)
-      const lip = arc(BIN.height - .035, BIN.radius - .006, Math.PI, Math.PI * 2)
       poly(c, lip, null, '#aaa', 1, false)
     } })
 }
@@ -322,8 +324,45 @@ function addBoss(c, project, items, state) {
   } })
 }
 
-function drawOffice(c, rect, state, held = false, power = 0) {
+// Cache fixed projections per canvas and scene size. Dynamic items still share
+// the depth sort, so furniture and opaque bin walls keep their occlusion.
+const fixedScenes = new WeakMap()
+function fixedScene(c, rect) {
+  const key = [rect.x, rect.y, rect.w, rect.h, c.canvas && c.canvas.width, c.canvas && c.canvas.height].join(',')
+  const previous = fixedScenes.get(c)
+  if (previous && previous.key === key) return previous
   const project = camera(rect)
+  const bin = []; addBin(c, project, bin)
+  const items = []
+  for (const solid of SOLIDS) {
+    if (solid.kind && solid.kind.startsWith('person')) continue
+    const [x0, y0, z0] = solid.min; const [x1, y1, z1] = solid.max
+    const vertices = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+      [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map(([x, y, z]) => project({ x, y, z }))
+    const faces = [[4, 5, 6, 7], [0, 4, 7, 3], [1, 5, 6, 2], [3, 2, 6, 7], [0, 1, 2, 3]]
+    const tones = solid.kind && solid.kind.startsWith('chair')
+      ? ['#aaa', '#aaa', '#c1c1c1', '#e0e0e0', '#c8c8c8']
+      : ['#d4d4d4', '#ccc', '#e6e6e6', '#fff', '#e1e1e1']
+    for (const [face, indices] of faces.entries()) {
+      // Cull box faces facing away from the fixed eye (0, 1.35, -.35).
+      if (face === 0 || (face === 1 && x0 <= 0) || (face === 2 && x1 >= 0) ||
+          (face === 3 && y1 >= 1.35)) continue
+      const points = indices.map(index => vertices[index])
+      const fill = shade(c, points[0].x, points[0].y, points[2].x, points[2].y,
+        [[0, face === 3 ? '#fff' : '#f4f4f4'], [1, tones[face]]])
+      items.push({ depth: points.reduce((sum, p) => sum + p.depth, 0) / points.length,
+        paint: () => poly(c, points, fill, INK, 1.1) })
+    }
+    addDeskDetail(c, project, items, solid)
+  }
+  const fixed = { key, project, bin, furniture: items }
+  fixedScenes.set(c, fixed)
+  return fixed
+}
+
+function drawOffice(c, rect, state, held = false, power = 0) {
+  const fixed = fixedScene(c, rect)
+  const project = fixed.project
   c.save()
   c.beginPath(); c.moveTo(rect.x, rect.y); c.lineTo(rect.x + rect.w, rect.y)
   c.lineTo(rect.x + rect.w, rect.y + rect.h); c.lineTo(rect.x, rect.y + rect.h); c.closePath(); c.clip()
@@ -360,7 +399,7 @@ function drawOffice(c, rect, state, held = false, power = 0) {
   poly(c, [{ x: clock.x - clock.scale * .08, y: clock.y }, { x: clock.x, y: clock.y },
     { x: clock.x, y: clock.y - clock.scale * .13 }], null, '#555', 1, false)
 
-  const items = []
+  const items = fixed.bin.slice()
   // Cast shadows away from the window at the back right of the room.
   for (const desk of SOLIDS.filter(solid => solid.kind === 'desk')) {
     for (const [offset, opacity] of [[.48, .035], [.4, .065]]) {
@@ -375,30 +414,10 @@ function drawOffice(c, rect, state, held = false, power = 0) {
     const binShadow = floorRing(project, BIN.x - .12, BIN.z - .08, .003, BIN.baseRadius * spread)
     poly(c, binShadow, `rgba(0,0,0,${opacity})`, null)
   }
-  addBin(c, project, items)
   addPeople(c, project, items, state)
   addProps(c, project, items, state)
   addBoss(c, project, items, state)
-  for (const solid of SOLIDS) {
-    if (solid.kind && solid.kind.startsWith('person')) continue
-    const [x0, y0, z0] = solid.min; const [x1, y1, z1] = solid.max
-    const vertices = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
-      [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map(([x, y, z]) => project({ x, y, z }))
-    const faces = [[4, 5, 6, 7], [0, 4, 7, 3], [1, 5, 6, 2], [3, 2, 6, 7], [0, 1, 2, 3]]
-    const tones = solid.kind && solid.kind.startsWith('chair')
-      ? ['#aaa', '#aaa', '#c1c1c1', '#e0e0e0', '#c8c8c8']
-      : ['#d4d4d4', '#ccc', '#e6e6e6', '#fff', '#e1e1e1']
-    for (const [face, indices] of faces.entries()) {
-      // Cull box faces facing away from the fixed eye (0, 1.35, -.35).
-      if (face === 0 || (face === 1 && x0 <= 0) || (face === 2 && x1 >= 0) ||
-          (face === 3 && y1 >= 1.35)) continue
-      const points = indices.map(index => vertices[index])
-      items.push({ depth: points.reduce((sum, p) => sum + p.depth, 0) / points.length,
-        paint: () => poly(c, points, shade(c, points[0].x, points[0].y, points[2].x, points[2].y,
-          [[0, face === 3 ? '#fff' : '#f4f4f4'], [1, tones[face]]]), INK, 1.1) })
-    }
-    addDeskDetail(c, project, items, solid)
-  }
+  items.push(...fixed.furniture)
   for (const ball of state.balls) {
     const p = project(ball)
     const inside = Math.hypot(ball.x - BIN.x, ball.z - BIN.z) < BIN.radius && ball.y < BIN.height + RADIUS

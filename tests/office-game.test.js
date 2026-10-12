@@ -8,7 +8,7 @@ const { layout } = require('../games/office/layout.js')
 const renderer = require('../games/office/renderer.js')
 
 function boot(options = {}) {
-  let now = 1000; let frameId = 0; let homes = 0
+  let now = 1000; let frameId = 0; let homes = 0; let writes = 0; let paints = 0
   const storage = options.storage || new Map()
   const frames = new Map(); const texts = []; const arcs = []
   const listeners = Object.fromEntries(['Start', 'Move', 'End', 'Cancel'].map(name => [name, new Set()]))
@@ -17,11 +17,12 @@ function boot(options = {}) {
       assert.ok(args.every(value => typeof value !== 'number' || Number.isFinite(value)), name)]))
   const drawArc = context.arc
   context.arc = (...args) => { drawArc(...args); arcs.push(args) }
-  context.clearRect = () => { texts.length = 0; arcs.length = 0 }
+  context.clearRect = () => { paints++; texts.length = 0; arcs.length = 0 }
   context.fillText = (value, x, y) => texts.push({ value: String(value), x, y })
   const wx = {
     getStorageSync: key => storage.get(key),
     setStorageSync: (key, value) => {
+      writes++
       if (options.storageFailure) throw new Error('Full')
       storage.set(key, structuredClone(value))
     }
@@ -54,8 +55,46 @@ function boot(options = {}) {
     emit('Start', point.x, point.y); flush(ms); emit('End', point.x, point.y)
   }
   return { scene, screen, frames, texts, arcs, listeners, storage, emit, flush, tap, charge,
-    state: () => rules.restore(storage.get(rules.SAVE_KEY)), homes: () => homes }
+    state: () => rules.restore(storage.get(rules.SAVE_KEY)), homes: () => homes,
+    writes: () => writes, paints: () => paints }
 }
+
+test('full charge stops idle redraws and writes but release still launches at full power', () => {
+  const game = boot(); const view = layout(game.screen)
+  game.emit('Start', view.charge.x, view.charge.y); game.flush(1700)
+  assert.equal(game.frames.size, 0)
+  assert.ok(game.texts.some(item => item.value.includes('100%')))
+  const paints = game.paints()
+  game.flush(60000)
+  assert.equal(game.paints(), paints); assert.equal(game.writes(), 0)
+  game.emit('End', view.charge.x, view.charge.y)
+  const ball = game.state().balls[0]
+  assert.ok(Math.abs(Math.hypot(ball.vx, ball.vy, ball.vz) - 10) < 1e-9)
+  assert.equal(game.frames.size, 1); assert.equal(game.writes(), 1)
+  game.scene.hide(); game.scene.dispose()
+  assert.equal(game.writes(), 1, 'unchanged lifecycle events must not save again')
+})
+
+test('cancelled full charge and idle lifecycle events do not save unchanged state', () => {
+  const game = boot(); const view = layout(game.screen)
+  game.emit('Start', view.charge.x, view.charge.y); game.flush(2000)
+  game.emit('Cancel', view.charge.x, view.charge.y)
+  game.scene.resize(game.screen); game.scene.hide(); game.scene.show()
+  game.tap(view.pause); game.tap(view.pause); game.tap(view.back)
+  assert.equal(game.writes(), 0); assert.equal(game.state().throws, 0)
+})
+
+test('failed dirty saves retry and clear the warning after storage recovers', () => {
+  const options = { storageFailure: true }; const game = boot(options)
+  game.charge(800)
+  assert.equal(game.writes(), 1)
+  assert.ok(game.texts.some(item => item.value.includes('保存失败')))
+  options.storageFailure = false
+  game.scene.hide(); game.scene.show()
+  assert.equal(game.state().throws, 1); assert.equal(game.writes(), 2)
+  assert.ok(game.texts.every(item => !item.value.includes('保存失败')))
+  game.scene.dispose(); assert.equal(game.writes(), 2)
+})
 
 test('charge button owns its gesture, unrelated fingers cannot release it, and aimed swipes do not throw', () => {
   const game = boot(); const view = layout(game.screen)

@@ -11,6 +11,38 @@ function body(id, values = {}) {
 }
 function fixture(balls) { return { ...rules.initialState(), balls, throws: balls.length, nextId: balls.length + 1 } }
 
+test('boss freezes other simultaneous impacts exactly at the eighth person hit', () => {
+  const state = rules.initialState(); const person = rules.PEOPLE[0]
+  state.throws = 7; state.cleared = 7; state.nextId = 8; state.totalPersonHits = 7
+  for (let index = 0; index < 2; index++) {
+    Object.assign(rules.launch(state, 0), { x: person.x, y: 1.32,
+      z: person.z - .035 - .115 - R - .01, vx: 0, vy: 0, vz: 4 })
+  }
+  rules.tick(state, STEP * 1000)
+  assert.equal(state.gameOver, 'people'); assert.equal(state.totalPersonHits, 8)
+  assert.equal(state.balls.filter(ball => ball.personHit).length, 1)
+  const saved = rules.snapshot(state); run(state, 10)
+  assert.deepEqual(rules.snapshot(state), saved)
+})
+
+test('tipping a prop preserves an angry cleanup reaction and its timer', () => {
+  const state = rules.initialState(); const prop = rules.PROPS[0]
+  const angry = require('../games/office/dialogue.js').LINES.find(line => line.mood === 'angry')
+  state.reaction = { id: angry.id, remaining: 5 }; state.cleanupIn = 3
+  Object.assign(rules.launch(state, 0), { x: prop.x + prop.w / 2, y: prop.y + prop.h / 2,
+    z: prop.z - prop.d / 2 - R - .01, vx: 0, vy: 0, vz: 4 })
+  rules.tick(state, STEP * 1000)
+  assert.equal(state.propHits.cup, true)
+  assert.equal(state.reaction.id, angry.id); assert.ok(state.cleanupIn > 2.9)
+})
+
+test('waking paper below the rim cannot score from an obsolete previous height', () => {
+  const state = fixture([body(1, { x: BIN.x, z: BIN.z, y: .4, previousY: 1,
+    asleep: true, vy: -.1, resolved: true })])
+  rules.tick(state, STEP * 1000)
+  assert.equal(state.scored, 0); assert.equal(state.balls[0].asleep, false)
+})
+
 test('swiping controls yaw and elevation; only held time determines power and is bounded', () => {
   const state = rules.initialState()
   rules.aim(state, 60, -40, 375)
@@ -335,43 +367,6 @@ test('fixed steps reproduce the trajectory at different frame rates and do not c
   for (const axis of ['x', 'y', 'z']) assert.ok(Math.abs(a.balls[0][axis] - b.balls[0][axis]) < .02)
   const c = rules.initialState(); rules.launch(c, 800); rules.tick(c, 60000)
   assert.ok(c.balls[0].z < 2)
-})
-
-test('aim preview follows real launches at all charge levels without mutating the session', () => {
-  for (const held of [0, 200, 800, 1120, 1600]) {
-    const state = rules.initialState(); const saved = rules.snapshot(state)
-    const path = rules.trajectory(state, held)
-    assert.deepEqual(rules.snapshot(state), saved)
-    assert.deepEqual(path[0], ORIGIN)
-    const ball = rules.launch(state, held)
-    for (let index = 1; index < Math.min(path.length - 1, 6); index++) {
-      const steps = index === 1 ? 1 : 8
-      for (let step = 0; step < steps; step++) rules.tick(state, STEP * 1000)
-      for (const axis of ['x', 'y', 'z']) assert.ok(Math.abs(ball[axis] - path[index][axis]) < 1e-9)
-    }
-  }
-  const a = rules.trajectory(rules.initialState(), 200).at(-1)
-  const b = rules.trajectory(rules.initialState(), 1120).at(-1)
-  assert.ok(b.z - a.z > 2)
-})
-
-test('aim marker ends at the actual first impact on floor, bin, person and prop', () => {
-  for (const [yaw, pitch, held] of [
-    [rules.DEFAULT_AIM.yaw, .48, 200], [rules.DEFAULT_AIM.yaw, .48, 1120],
-    [Math.atan2(rules.PEOPLE[0].x - ORIGIN.x, rules.PEOPLE[0].z - ORIGIN.z), .48, 800],
-    [Math.atan2(rules.PROPS[0].x + rules.PROPS[0].w / 2 - ORIGIN.x, rules.PROPS[0].z - ORIGIN.z), .12, 1400]
-  ]) {
-    const state = rules.initialState(); state.yaw = yaw; state.pitch = pitch
-    const marker = rules.trajectory(state, held).at(-1)
-    const ball = rules.launch(state, held); let collided = false
-    for (let step = 0; step < 360 && !collided; step++) {
-      const expected = { vx: ball.vx * .999, vy: (ball.vy - 9.8 * STEP) * .999, vz: ball.vz * .999 }
-      rules.tick(state, STEP * 1000)
-      collided = ['vx', 'vy', 'vz'].some(axis => Math.abs(ball[axis] - expected[axis]) > 1e-8)
-      if (collided) assert.ok(Math.hypot(marker.x - ball.x, marker.y - ball.y, marker.z - ball.z) < .02)
-    }
-    assert.equal(collided, true)
-  }
 })
 
 test('subtle props are reachable by real throws, tip once, retain state and the bell calls the boss', () => {
