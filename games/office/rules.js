@@ -127,7 +127,12 @@ function propSolid(prop, state) {
   return { ...prop, angle, kind: 'prop', min: [prop.x, prop.y, prop.z - prop.d / 2],
     max: [prop.x + width, prop.y + height, prop.z + prop.d / 2] }
 }
+const geometryCache = new WeakMap()
+const SOLID_CELL = .5
 function sceneSolids(state) {
+  const signature = [state.reaction && state.reaction.id, ...PROPS.map(prop => !!state.propHits[prop.id])].join('|')
+  const cached = geometryCache.get(state)
+  if (cached && cached.signature === signature) return cached.grid
   const line = state.reaction && LINES.find(line => line.id === state.reaction.id)
   let solids = SOLIDS
   if (line) {
@@ -137,30 +142,26 @@ function sceneSolids(state) {
       solids.push(capsule(person, 'arm', points[index - 1], points[index], .04))
     }
   }
-  return solids.concat(PROPS.map(prop => propSolid(prop, state)))
+  solids = solids.concat(PROPS.map(prop => propSolid(prop, state)))
+  const grid = new Map()
+  const margin = RADIUS + .002
+  for (const solid of solids) {
+    for (let x = Math.floor((solid.min[0] - margin) / SOLID_CELL); x <= Math.floor((solid.max[0] + margin) / SOLID_CELL); x++) {
+      for (let z = Math.floor((solid.min[2] - margin) / SOLID_CELL); z <= Math.floor((solid.max[2] + margin) / SOLID_CELL); z++) {
+        const key = x + z * 128
+        if (!grid.has(key)) grid.set(key, [])
+        grid.get(key).push(solid)
+      }
+    }
+  }
+  geometryCache.set(state, { signature, grid })
+  return grid
 }
 function integrate(ball) {
   ball.vy -= GRAVITY * STEP
   ball.x += ball.vx * STEP; ball.y += ball.vy * STEP; ball.z += ball.vz * STEP
   ball.vx *= .999; ball.vy *= .999; ball.vz *= .999
 }
-// Preview ends at the first contact, using the same launch, timestep and geometry.
-function trajectory(state, heldMs = 1120) {
-  const ball = projectile(state, heldMs); ball.resolved = true
-  const points = [{ x: ball.x, y: ball.y, z: ball.z }]
-  const solids = sceneSolids(state)
-  for (let frame = 0; frame < 360; frame++) {
-    integrate(ball)
-    const before = { ...ball }
-    staticCollisions(ball, state, solids)
-    const collided = ['x', 'y', 'z', 'vx', 'vy', 'vz'].some(key => Math.abs(before[key] - ball[key]) > 1e-9) ||
-      state.balls.some(other => Math.hypot(ball.x - other.x, ball.y - other.y, ball.z - other.z) <= RADIUS * 2)
-    if (frame % 8 === 0 || collided) points.push({ x: ball.x, y: ball.y, z: ball.z })
-    if (collided) break
-  }
-  return points
-}
-
 function bounce(ball, nx, ny, nz, penetration, restitution = .32) {
   ball.x += nx * penetration; ball.y += ny * penetration; ball.z += nz * penetration
   const speed = ball.vx * nx + ball.vy * ny + ball.vz * nz
@@ -205,7 +206,7 @@ function capsuleCollision(ball, solid) {
 }
 
 function personImpact(state, ball, solid, impact) {
-  if (solid.personId === undefined || impact < .9 || ball.resolved !== false || ball.personHit) return
+  if (state.gameOver || solid.personId === undefined || impact < .9 || ball.resolved !== false || ball.personHit) return
   ball.personHit = { speaker: solid.personId, part: solid.part }
   state.personHits[solid.personId] = Math.min(3, state.personHits[solid.personId] + 1)
   state.totalPersonHits++
@@ -217,7 +218,7 @@ function personImpact(state, ball, solid, impact) {
   if (line.mood === 'angry') state.cleanupIn = 4.4
 }
 
-function staticCollisions(ball, state, solids) {
+function staticCollisions(ball, state, grid) {
   const r = RADIUS
   if (ball.y <= r + .006) bounce(ball, 0, 1, 0, Math.max(0, r - ball.y))
   if (ball.y > ROOM.ceiling - r) bounce(ball, 0, -1, 0, ball.y - (ROOM.ceiling - r))
@@ -245,6 +246,7 @@ function staticCollisions(ball, state, solids) {
       bounce(ball, 0, 1, 0, Math.max(0, BIN.bottom + r - ball.y), .24)
     }
   }
+  const solids = grid.get(Math.floor(ball.x / SOLID_CELL) + Math.floor(ball.z / SOLID_CELL) * 128) || []
   for (const solid of solids) {
     const margin = r + .002
     if (ball.x < solid.min[0] - margin || ball.x > solid.max[0] + margin || ball.y < solid.min[1] - margin ||
@@ -256,7 +258,7 @@ function staticCollisions(ball, state, solids) {
           !state.propHits[solid.id] && !state.gameOver) {
         ball.propHit = solid.id; state.propHits[solid.id] = true
         if (solid.id === 'bell') callBoss(state, 'bell')
-        else {
+        else if (state.cleanupIn === 0) {
           const line = propLineFor(solid.id, ++state.reactionSerial)
           state.reaction = { id: line.id, remaining: 4.2 }
         }
@@ -272,14 +274,21 @@ function ballPairs(balls) {
   for (const ball of balls) {
     const ix = Math.floor(ball.x / cell); const iy = Math.floor(ball.y / cell); const iz = Math.floor(ball.z / cell)
     for (let x = ix - 1; x <= ix + 1; x++) for (let y = iy - 1; y <= iy + 1; y++) for (let z = iz - 1; z <= iz + 1; z++) {
-      const bucket = grid.get(`${x},${y},${z}`)
+      const bucket = grid.get(pairKey(x, y, z))
       if (bucket) for (const other of bucket) pairs.push([ball, other])
     }
-    const key = `${ix},${iy},${iz}`
+    const key = pairKey(ix, iy, iz)
     if (!grid.has(key)) grid.set(key, [])
     grid.get(key).push(ball)
   }
   return pairs
+}
+
+// Room coordinates fit comfortably in signed 10-bit cells. Keep arbitrary
+// out-of-room inputs distinct too, without aliasing numeric room keys.
+function pairKey(x, y, z) {
+  return x >= -512 && x < 512 && y >= -512 && y < 512 && z >= -512 && z < 512
+    ? (x + 512) + (y + 512) * 1024 + (z + 512) * 1048576 : `${x},${y},${z}`
 }
 
 function collidePair(a, b) {
@@ -321,14 +330,17 @@ function step(state) {
   }
   for (const ball of state.balls) {
     ball.supported = false
-    if (ball.asleep) continue
     ball.previousY = ball.y
+    if (ball.asleep) continue
     integrate(ball)
   }
   // Iterative contacts allow stacks, including previously settled paper balls.
   const solids = sceneSolids(state)
   for (let iteration = 0; iteration < 4; iteration++) {
-    for (const ball of state.balls) staticCollisions(ball, state, solids)
+    for (const ball of state.balls) {
+      staticCollisions(ball, state, solids)
+      if (state.gameOver) return
+    }
     for (const [a, b] of ballPairs(state.balls)) collidePair(a, b)
   }
   if (state.gameOver) return
@@ -491,5 +503,5 @@ function restore(value) {
 }
 
 module.exports = { SAVE_KEY, STEP, RADIUS, MAX_CHARGE_MS, ROOM, BIN, ORIGIN, DEFAULT_AIM, DESKS, PEOPLE, SOLIDS, PROPS, HIT_LIMIT,
-  trajectory, propSolid,
+  propSolid,
   armPoints, binRadius, initialState, aim, launch, tick, moving, active, inBinPile, clearPaper, snapshot, restore }

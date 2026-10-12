@@ -15,12 +15,14 @@ function start({ context, screen, goHome }) {
   let lastAt = Date.now()
   let lastSaved = lastAt
   let warning = ''
+  let dirty = false
   const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : callback => setTimeout(callback, 16)
   const caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : clearTimeout
   const heldMs = () => pressed && pressed.action === 'charge' ? Math.max(0, Date.now() - pressed.at) : 0
 
   function persist() {
-    try { wx.setStorageSync(rules.SAVE_KEY, rules.snapshot(state)); warning = '' }
+    if (!dirty) return
+    try { wx.setStorageSync(rules.SAVE_KEY, rules.snapshot(state)); warning = ''; dirty = false }
     catch (error) { warning = '保存失败 · 当前仍可继续投掷' }
     lastSaved = Date.now()
   }
@@ -31,20 +33,25 @@ function start({ context, screen, goHome }) {
   function stop() { if (frame !== null) caf(frame); frame = null }
   function schedule() {
     if (frame === null && active && visible && !paused &&
-        !state.gameOver && (rules.active(state) || (pressed && pressed.action === 'charge'))) frame = raf(update)
+        !state.gameOver && (rules.active(state) || (pressed && pressed.action === 'charge' && heldMs() < rules.MAX_CHARGE_MS))) frame = raf(update)
   }
   function update() {
     frame = null
     if (!active || !visible || paused) return
     const now = Date.now()
     const wasActive = rules.active(state)
-    if (wasActive) rules.tick(state, now - lastAt)
+    if (wasActive && now > lastAt) { rules.tick(state, now - lastAt); dirty = true }
     if (state.gameOver) pressed = null
     lastAt = now
     if ((wasActive && !rules.active(state)) || now - lastSaved >= 1000) persist()
     repaint(); schedule()
   }
   function findTouch(e, id) { return (e.changedTouches || []).find(touch => touch.identifier === id) }
+  function aim(dx, dy) {
+    const { yaw, pitch } = state
+    rules.aim(state, dx, dy, view.width, renderer.aimGuide(view.scene, state).pitchScale)
+    if (state.yaw !== yaw || state.pitch !== pitch) dirty = true
+  }
   function onStart(e) {
     if (!active || !visible || pressed) return
     const t = (e.changedTouches || e.touches || [])[0]
@@ -59,7 +66,7 @@ function start({ context, screen, goHome }) {
     if (!action) return
     pressed = { id: t.identifier, action, at: Date.now(), x: t.clientX, y: t.clientY,
       startX: t.clientX, startY: t.clientY }
-    if (action === 'charge') { lastAt = Date.now(); schedule() }
+    if (action === 'charge') { if (!rules.active(state)) lastAt = Date.now(); schedule() }
     repaint()
   }
   function onMove(e) {
@@ -67,7 +74,7 @@ function start({ context, screen, goHome }) {
     const t = (e.touches || []).find(touch => touch.identifier === pressed.id) || findTouch(e, pressed.id)
     if (!t) return
     if (pressed.action === 'aim') {
-      rules.aim(state, t.clientX - pressed.x, t.clientY - pressed.y, view.width, renderer.aimGuide(view.scene, state).pitchScale)
+      aim(t.clientX - pressed.x, t.clientY - pressed.y)
       pressed.x = t.clientX; pressed.y = t.clientY
       repaint()
     }
@@ -78,15 +85,15 @@ function start({ context, screen, goHome }) {
     const t = findTouch(e, pressed.id)
     if (!t) return
     const gesture = pressed
-    if (gesture.action === 'charge' && !paused && !state.gameOver) rules.launch(state, heldMs())
-    else if (gesture.action === 'aim' && !state.gameOver) rules.aim(state, t.clientX - gesture.x, t.clientY - gesture.y, view.width, renderer.aimGuide(view.scene, state).pitchScale)
+    if (gesture.action === 'charge' && !paused && !state.gameOver) { rules.launch(state, heldMs()); dirty = true }
+    else if (gesture.action === 'aim' && !state.gameOver) aim(t.clientX - gesture.x, t.clientY - gesture.y)
     pressed = null
     if (['back', 'pause', 'clean', 'restart'].includes(gesture.action)) {
       const rect = view[gesture.action]
       if (contains(rect, t) && Math.hypot(t.clientX - gesture.startX, t.clientY - gesture.startY) < 16) {
         if (gesture.action === 'back') { persist(); goHome(); return }
-        if (gesture.action === 'restart') { state = rules.initialState(); paused = false; stop() }
-        else if (gesture.action === 'clean') { rules.clearPaper(state); stop() }
+        if (gesture.action === 'restart') { state = rules.initialState(); dirty = true; paused = false; stop() }
+        else if (gesture.action === 'clean') { rules.clearPaper(state); dirty = true; stop() }
         else { paused = !paused; stop() }
       }
     }
