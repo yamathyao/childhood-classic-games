@@ -5,7 +5,8 @@ const games = [
   { id: 'sokoban', name: '推箱子', category: '经典益智' },
   { id: 'tetris', name: '俄罗斯方块', category: '经典街机' },
   { id: 'driller', name: '钻地挑战', category: '矿层冒险' },
-  { id: 'textbattle', name: '文字对战', category: '策略对战' }
+  { id: 'textbattle', name: '文字对战', category: '策略对战' },
+  { id: 'office', name: '办公室投篮', category: '轻松一投' }
 ]
 const saveKey = 'collection.order.v1'
 const longPressMs = 550
@@ -25,9 +26,10 @@ function moveGame(order, id, index) {
 
 function sortLayout(screen) {
   const { width, height, top, bottom } = screen
-  const gap = 10
-  const rowHeight = Math.min(104, (height - top - bottom - 208 - gap * (games.length - 1)) / games.length)
-  const listTop = top + 108
+  const compact = height - top - bottom < 540
+  const gap = compact ? 8 : 10
+  const rowHeight = Math.min(104, Math.max(44, (height - top - bottom - (compact ? 196 : 208) - gap * (games.length - 1)) / games.length))
+  const listTop = top + (compact ? 96 : 108)
   const rows = games.map((_, index) => ({ x: 22, y: listTop + index * (rowHeight + gap), w: width - 44, h: rowHeight }))
   const actionsY = height - bottom - 64
   return {

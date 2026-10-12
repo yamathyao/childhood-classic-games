@@ -150,7 +150,7 @@ function visibleSortNames(game) {
 
 test('collection normalizes old, malformed and duplicated order, appending new games', () => {
   assert.deepEqual(collection.normalizeOrder(['tetris', 'removed', 'tetris', 'klotski']),
-    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle'])
+    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle', 'office'])
   for (const invalid of [null, {}, 'tetris', 0]) assert.deepEqual(collection.normalizeOrder(invalid), defaultOrder)
   const game = boot('index', { storage: [[collection.saveKey, ['tetris', 'removed', 'tetris']]] })
   const first = game.texts.find(item => item.text === '俄罗斯方块')
@@ -162,7 +162,7 @@ test('collection normalizes old, malformed and duplicated order, appending new g
 test('collection sorting rows and actions fit phone safe areas with equal card dimensions', () => {
   for (const [width, height, top, bottom] of [[320, 568, 24, 16], [375, 667, 24, 16], [390, 844, 47, 34]]) {
     const view = collection.sortLayout({ width, height, top, bottom })
-    assert.equal(view.rows.length, 5)
+    assert.equal(view.rows.length, collection.games.length)
     view.rows.forEach((row, index) => {
       assert.deepEqual([row.w, row.h], [view.rows[0].w, view.rows[0].h])
       assert.ok(row.x > 0 && row.x + row.w < width)
@@ -198,12 +198,12 @@ test('collection long press, drag in both directions, save and restart preserve 
   const view = enterSort(game)
   assert.equal(game.timers.size, 0)
   dragSort(game, view, 4, 0)
-  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战'])
+  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战', '办公室投篮'])
   dragSort(game, view, 0, 2)
-  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战'])
+  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战', '办公室投篮'])
   dragSort(game, view, 3, 0)
   game.tap(view.done)
-  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller']
+  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller', 'office']
   assert.deepEqual(structuredClone(game.storage.get(collection.saveKey)), expected)
   assertReleased(game)
   const restarted = boot('index', { storage: [...game.storage] })
@@ -262,7 +262,7 @@ test('collection drag clamps to ends, coalesces touch moves and stays idle after
   assert.equal(game.metrics.paints, 1)
   game.emit('End', 70, 900)
   assert.equal(visibleSortNames(game).at(-1), '华容道')
-  const last = view.rows[4]
+  const last = view.rows.at(-1)
   game.emit('Start', 70, last.y + last.h / 2)
   game.emit('End', 70, -100)
   assert.equal(visibleSortNames(game)[0], '华容道')
