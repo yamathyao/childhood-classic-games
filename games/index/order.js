@@ -6,7 +6,8 @@ const games = [
   { id: 'tetris', name: '俄罗斯方块', category: '经典街机' },
   { id: 'driller', name: '钻地挑战', category: '矿层冒险' },
   { id: 'textbattle', name: '文字对战', category: '策略对战' },
-  { id: 'office', name: '办公室投篮', category: '轻松一投' }
+  { id: 'office', name: '办公室投篮', category: '轻松一投' },
+  { id: 'bicycle', name: '自行车大冒险', category: '山野速降' }
 ]
 const saveKey = 'collection.order.v1'
 const longPressMs = 550
@@ -27,9 +28,9 @@ function moveGame(order, id, index) {
 function sortLayout(screen) {
   const { width, height, top, bottom } = screen
   const compact = height - top - bottom < 540
-  const gap = compact ? 8 : 10
-  const rowHeight = Math.min(104, Math.max(44, (height - top - bottom - (compact ? 196 : 208) - gap * (games.length - 1)) / games.length))
-  const listTop = top + (compact ? 96 : 108)
+  const gap = compact ? 6 : 10
+  const rowHeight = Math.min(104, Math.max(44, (height - top - bottom - (compact ? 184 : 208) - gap * (games.length - 1)) / games.length))
+  const listTop = top + (compact ? 90 : 108)
   const rows = games.map((_, index) => ({ x: 22, y: listTop + index * (rowHeight + gap), w: width - 44, h: rowHeight }))
   const actionsY = height - bottom - 64
   return {
@@ -61,7 +62,7 @@ function drawSort(c, screen, order, drag, selected, warning, drawPreview) {
     drawPreview(id, { x: 8, y: 8, w: 112, h: 112 })
     c.restore()
     const labelX = cover.x + size + 14
-    text(c, game.name, labelX, rect.y + rect.h / 2 - 9, 17, P.ink, 'left', true)
+    text(c, game.name, labelX, rect.y + rect.h / 2 - 9, Math.min(17, (rect.x + rect.w - 38 - labelX) / game.name.length), P.ink, 'left', true)
     text(c, `${String(index + 1).padStart(2, '0')}  /  ${game.category}`, labelX, rect.y + rect.h / 2 + 13, 10, P.muted)
     const handleX = rect.x + rect.w - 23
     for (let row = -1; row <= 1; row++) for (const dx of [-3, 3]) {

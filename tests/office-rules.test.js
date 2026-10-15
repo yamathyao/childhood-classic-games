@@ -130,6 +130,19 @@ test('new paper collides with settled paper and wakes it; stable stacks stop sim
   for (const ball of pile.balls) assert.ok(ball.y >= R - .012)
 })
 
+test('moving paper wakes a supported sleeper regardless of launch order', () => {
+  for (const reverse of [false, true]) {
+    const resting = body(1, { x: 0, y: R, z: 2, asleep: true })
+    const arriving = body(2, { x: -.3, y: R, z: 2, vx: 4 })
+    const state = fixture(reverse ? [arriving, resting] : [resting, arriving])
+    run(state, .07)
+    assert.equal(resting.asleep, false)
+    assert.ok(resting.vx > .3); assert.ok(arriving.vx < 3)
+    run(state, 6)
+    assert.equal(rules.moving(state), false)
+  }
+})
+
 test('desk undersides, front edges and all sixteen legs bounce full-speed paper without triggering a person reaction', () => {
   for (const desk of SOLIDS.filter(solid => solid.kind === 'desk')) {
     for (const [position, axis] of [

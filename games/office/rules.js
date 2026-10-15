@@ -271,15 +271,25 @@ function ballPairs(balls) {
   const cell = RADIUS * 2 + .008
   const grid = new Map()
   const pairs = []
-  for (const ball of balls) {
+  for (let index = 0; index < balls.length; index++) {
+    const ball = balls[index]
+    const key = pairKey(Math.floor(ball.x / cell), Math.floor(ball.y / cell), Math.floor(ball.z / cell))
+    if (!grid.has(key)) grid.set(key, [])
+    grid.get(key).push(index)
+  }
+  for (let index = 0; index < balls.length; index++) {
+    const ball = balls[index]
+    // Supported sleepers need no neighborhood search. Moving paper still
+    // queries them and can wake them; unsupported sleepers still check stacks.
+    if (ball.asleep && ball.supported) continue
     const ix = Math.floor(ball.x / cell); const iy = Math.floor(ball.y / cell); const iz = Math.floor(ball.z / cell)
     for (let x = ix - 1; x <= ix + 1; x++) for (let y = iy - 1; y <= iy + 1; y++) for (let z = iz - 1; z <= iz + 1; z++) {
       const bucket = grid.get(pairKey(x, y, z))
-      if (bucket) for (const other of bucket) pairs.push([ball, other])
+      if (bucket) for (const other of bucket) {
+        if (other === index || (other > index && (!balls[other].asleep || !balls[other].supported))) continue
+        pairs.push([ball, balls[other]])
+      }
     }
-    const key = pairKey(ix, iy, iz)
-    if (!grid.has(key)) grid.set(key, [])
-    grid.get(key).push(ball)
   }
   return pairs
 }

@@ -150,7 +150,7 @@ function visibleSortNames(game) {
 
 test('collection normalizes old, malformed and duplicated order, appending new games', () => {
   assert.deepEqual(collection.normalizeOrder(['tetris', 'removed', 'tetris', 'klotski']),
-    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle', 'office'])
+    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle', 'office', 'bicycle'])
   for (const invalid of [null, {}, 'tetris', 0]) assert.deepEqual(collection.normalizeOrder(invalid), defaultOrder)
   const game = boot('index', { storage: [[collection.saveKey, ['tetris', 'removed', 'tetris']]] })
   const first = game.texts.find(item => item.text === '俄罗斯方块')
@@ -198,12 +198,12 @@ test('collection long press, drag in both directions, save and restart preserve 
   const view = enterSort(game)
   assert.equal(game.timers.size, 0)
   dragSort(game, view, 4, 0)
-  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战', '办公室投篮'])
+  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险'])
   dragSort(game, view, 0, 2)
-  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战', '办公室投篮'])
+  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险'])
   dragSort(game, view, 3, 0)
   game.tap(view.done)
-  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller', 'office']
+  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller', 'office', 'bicycle']
   assert.deepEqual(structuredClone(game.storage.get(collection.saveKey)), expected)
   assertReleased(game)
   const restarted = boot('index', { storage: [...game.storage] })

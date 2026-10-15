@@ -435,7 +435,7 @@ function drawGuide(c, view, state, modal) {
       '① 先判闪避；暴击将攻击提高至1.8倍。',
       state.combatVersion >= 8 ? '② 命中伤害＝攻击－防御，最低1。' : '② 命中伤害＝攻击－有效防御，最低1。',
       '③ 武势满100自动施技；胜战选择强化。',
-      state.combatVersion >= 10 ? '④ 四战对初始属性；第五战对成长属性。' : '④ 首战选武器，每战可调整战斗姿态。'
+      state.combatVersion >= 10 ? '④ 每五战遇强敌，之后四战参照该强敌。' : '④ 首战选武器，每战可调整战斗姿态。'
     ] : ['① 首战选武器，每战可调整战斗姿态。', '② 武势满100自动释放武器技能。', '③ 胜利后三选一强化，仅本轮生效。', '④ 对手逐步变强，每五战迎接强敌。']
     lines.forEach((value, i) => text(c, value, r.x + 14, r.y + 108 + i * 24, 12, colors.ink))
     drawAttributes(c, attributePanels({ x: r.x + 12, y: r.y + 202, w: r.w - 24, h: 146 }), state)

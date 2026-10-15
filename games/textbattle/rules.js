@@ -125,14 +125,16 @@ function refreshPlayer(state) {
   state.player.cooldown = 1000 / state.player.stats.spd
 }
 function makeEnemy(state) {
+  const reference = state.round > 5 && state.round % 5 !== 0 && state.enemy
+    ? ((state.round - 1) % 5 === 0 ? state.enemy.stats : state.enemy.reference) : null
   const weapon = weapons[Math.floor(random(state) * weapons.length)].id
   const choices = enemyNaming.catalog.filter(item => item.name !== (state.enemy && state.enemy.name))
   const identity = choices[Math.floor(random(state) * choices.length)]
   const rolled = rollBase(state)
   const base = state.combatVersion >= 10 ? nearbyEnemyBase(rolled, state.player.base) : rolled
-  const attributes = stats(base, weapon, 'strong', true, state.round, undefined, state.progression, state.combatVersion)
-  state.enemy = { name: identity.name, gender: identity.gender, weapon, base, stats: attributes,
-    hp: attributes.maxHp, cooldown: 1000 / attributes.spd }
+  state.enemy = { name: identity.name, gender: identity.gender, weapon, base,
+    ...(reference ? { reference: { ...reference, pierce: 0 } } : {}) }
+  refreshEnemy(state)
 }
 function nearbyEnemyBase(base, reference) {
   // Reuse allocation randomness for a bounded ±8% variation.
@@ -146,8 +148,20 @@ function nearbyEnemyBase(base, reference) {
   return base
 }
 function refreshEnemy(state) {
-  state.enemy.stats = stats(state.enemy.base, state.enemy.weapon, 'strong', true, state.round, undefined, state.progression, state.combatVersion)
+  state.enemy.stats = enemyStats(state, state.enemy)
   state.enemy.hp = state.enemy.stats.maxHp; state.enemy.cooldown = 1000 / state.enemy.stats.spd
+}
+function enemyStats(state, enemy) {
+  if (!enemy.reference) return stats(enemy.base, enemy.weapon, 'strong', true, state.round, undefined, state.progression, state.combatVersion)
+  // The last strong opponent's final attributes are the next block's baseline.
+  // Equipment and earned rewards are already included; do not multiply them again.
+  const attributes = { pierce: 0 }
+  for (const key of ['maxHp', 'atk', 'def', 'spd', 'crit', 'dodge']) {
+    const factor = Math.max(.92, Math.min(1.08, enemy.base[key] / state.player.base[key]))
+    const value = enemy.reference[key] * factor
+    attributes[key] = ['maxHp', 'atk', 'def'].includes(key) ? Math.round(value) : Math.min(({ spd: 4, crit: 60, dodge: 45 })[key], value)
+  }
+  return attributes
 }
 function initialState(seed = Date.now()) {
   const state = { version: 5, combatVersion: 10, runId: (seed >>> 0) || 1, rng: (seed >>> 0) || 1, round: 1, streak: 0, status: 'prepare',
@@ -272,6 +286,7 @@ function tick(state, milliseconds) {
 }
 function snapshot(state) {
   const actor = value => ({ ...value, base: { ...value.base }, stats: { ...value.stats },
+    ...(value.reference ? { reference: { ...value.reference } } : {}),
     ...(value.combat ? { combat: { ...value.combat } } : {}) })
   return { ...state, player: actor(state.player), enemy: actor(state.enemy), logs: state.logs.map(item => ({ ...item })),
     ...(state.progression ? { progression: progression.copy(state.progression) } : {}),
@@ -294,6 +309,10 @@ function restore(value) {
     typeof value.player.name !== 'string' || !value.player.name.trim() || value.player.name.length > 8 ||
     !validBase(value.player.base, value.combatVersion) || !validBase(value.enemy.base, value.combatVersion) || !Array.isArray(value.logs) || value.logs.length > 80) return null
   const modern = value.version === 5 && value.combatVersion >= 4
+  if (value.enemy.reference !== undefined && (value.combatVersion < 10 || value.round <= 5 || value.round % 5 === 0 ||
+    !value.enemy.reference || !['maxHp', 'atk', 'def', 'spd', 'crit', 'dodge'].every(key =>
+      finite(value.enemy.reference[key], key === 'def' ? 0 : .01, ({ spd: 4, crit: 60, dodge: 45 })[key] || 100000)) ||
+    value.enemy.reference.pierce !== 0)) return null
   if (value.progression && value.progression.version === 5 && value.combatVersion < 10) return null
   if (value.progression !== undefined && (!modern || !progression.valid(value.progression, value))) return null
   if (value.report !== undefined && (!report.valid(value.report) || (value.status === 'prepare' &&
@@ -315,7 +334,7 @@ function restore(value) {
     if (!find(catalog, side === 'player' ? value.weapon : actor.weapon)) return null
     if (actor.gender !== undefined && !['male', 'female'].includes(actor.gender)) return null
     const enemyContext = side === 'enemy' ? (modern ? true : actor.kind) : null
-    const expected = stats(actor.base, side === 'player' ? value.weapon : actor.weapon,
+    const expected = side === 'enemy' && actor.reference ? enemyStats(value, actor) : stats(actor.base, side === 'player' ? value.weapon : actor.weapon,
       side === 'player' ? value.stance : 'strong', enemyContext, value.round, catalog, value.progression, value.combatVersion || 1)
     if (!actor.stats || Object.keys(expected).some(key => actor.stats[key] !== expected[key]) ||
       !Number.isInteger(actor.hp) || !finite(actor.hp, 0, expected.maxHp) || !finite(actor.cooldown, 0, 1000 / expected.spd + .001)) return null

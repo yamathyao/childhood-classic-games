@@ -8,24 +8,34 @@ const { layout } = require('../games/textbattle/layout.js')
 function victory(state) {
   state.status = 'won'; state.enemy.hp = 0; state.streak = state.round
 }
-test('ordinary opponents stay near initial rolls and every fifth opponent reflects all confirmed upgrades', () => {
+test('ordinary opponents follow the previous strong opponent and every fifth reflects all confirmed upgrades', () => {
   for (let seed = 1; seed <= 60; seed++) {
     const state = rules.initialState(Math.imul(seed, 2654435761) >>> 0)
     rules.reroll(state)
     const initial = { ...state.player.base }
-    for (let round = 1; round <= 15; round++) {
+    let lastStrong = null
+    for (let round = 1; round <= 20; round++) {
       for (const key of ['maxHp', 'atk', 'def', 'crit', 'dodge', 'spd']) {
         const delta = Math.abs(state.enemy.base[key] - initial[key])
         assert.ok(delta <= initial[key] * .08 + (['maxHp', 'atk', 'def'].includes(key) ? .5 : 1e-10))
       }
       const plain = rules.stats(state.enemy.base, state.enemy.weapon, 'strong', true, 1)
-      const expected = round % 5 === 0 ? progression.apply(plain, state.progression) : plain
-      assert.deepEqual(state.enemy.stats, expected)
+      if (round > 5 && round % 5 !== 0) {
+        assert.deepEqual(state.enemy.reference, lastStrong)
+        for (const key of ['maxHp', 'atk', 'def', 'crit', 'dodge', 'spd']) {
+          const delta = Math.abs(state.enemy.stats[key] - lastStrong[key])
+          assert.ok(delta <= lastStrong[key] * .08 + (['maxHp', 'atk', 'def'].includes(key) ? .5 : 1e-10), `${round}/${key}`)
+        }
+      } else {
+        const expected = round % 5 === 0 ? progression.apply(plain, state.progression) : plain
+        assert.deepEqual(state.enemy.stats, expected)
+        if (round % 5 === 0) lastStrong = { ...state.enemy.stats }
+      }
       const enemy = structuredClone(state.enemy); const rng = state.rng
       assert.ok(rules.configure(state, 'stance', 'agile'))
       assert.deepEqual(state.enemy, enemy); assert.equal(state.rng, rng)
       assert.ok(rules.restore(rules.snapshot(state)))
-      if (round < 15) {
+      if (round < 20) {
         victory(state); assert.ok(rules.nextRound(state))
         const options = rules.upgradeChoices(state)
         const chosen = options.find(item => item.id === 'atk') || options[0]
@@ -38,6 +48,36 @@ test('ordinary opponents stay near initial rolls and every fifth opponent reflec
     }
   }
 })
+test('strong-opponent baselines survive reload, isolate snapshots and reject malformed saves', () => {
+  const state = rules.initialState(123)
+  while (state.round < 6) {
+    victory(state); rules.nextRound(state)
+    rules.chooseUpgrade(state, rules.upgradeChoices(state)[0].id)
+  }
+  const saved = rules.snapshot(state)
+  assert.deepEqual(rules.restore(saved), state)
+  saved.enemy.reference.atk++
+  assert.notEqual(saved.enemy.reference.atk, state.enemy.reference.atk)
+  for (const mutate of [s => { s.enemy.reference = null }, s => { s.enemy.reference.spd = Infinity },
+    s => { delete s.enemy.reference.maxHp }, s => { s.enemy.reference.crit = 61 },
+    s => { s.enemy.stats.atk++ }]) {
+    const invalid = rules.snapshot(state); mutate(invalid)
+    assert.equal(rules.restore(invalid), null)
+  }
+  const restored = rules.restore(rules.snapshot(state))
+  rules.startFight(restored); rules.startFight(state)
+  assert.deepEqual(rules.tick(restored, 3000), rules.tick(state, 3000))
+  assert.deepEqual(restored, state)
+  // Saves created before the fix have no baseline. Resume their ongoing fight
+  // exactly; the next strong opponent supplies the new baseline on progression.
+  const legacy = rules.snapshot(state); delete legacy.enemy.reference
+  legacy.status = 'prepare'; legacy.logs = []; legacy.report = report.fresh(); legacy.elapsedMs = 0
+  require('../games/textbattle/strategy.js').resetCombat(legacy)
+  legacy.enemy.stats = rules.stats(legacy.enemy.base, legacy.enemy.weapon, 'strong', true, legacy.round, undefined, legacy.progression)
+  for (const actor of [legacy.player, legacy.enemy]) { actor.hp = actor.stats.maxHp; actor.cooldown = 1000 / actor.stats.spd }
+  assert.deepEqual(rules.restore(legacy), legacy)
+})
+
 test('fixed rewards use exact grade values, honor caps and suppress exhausted types', () => {
   const tables = { atk: [1, 2, 3, 5], hp: [10, 20, 30, 50], def: [1, 2, 3, 5],
     spd: [.04, .08, .12, .2], crit: [2, 4, 6, 10], dodge: [2, 4, 6, 10] }

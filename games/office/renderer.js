@@ -360,7 +360,7 @@ function fixedScene(c, rect) {
   return fixed
 }
 
-function drawOffice(c, rect, state, held = false, power = 0) {
+function drawWorld(c, rect, state) {
   const fixed = fixedScene(c, rect)
   const project = fixed.project
   c.save()
@@ -443,6 +443,45 @@ function drawOffice(c, rect, state, held = false, power = 0) {
       } })
   }
   items.sort((a, b) => b.depth - a.depth).forEach(item => item.paint())
+  c.restore()
+}
+
+const worldCaches = new WeakMap()
+function paintWorld(c, rect, state) {
+  if (state.balls.some(ball => !ball.asleep) || typeof wx === 'undefined' ||
+      typeof wx.createOffscreenCanvas !== 'function' || typeof c.drawImage !== 'function') {
+    drawWorld(c, rect, state); return
+  }
+  const transform = typeof c.getTransform === 'function' ? c.getTransform() : null
+  const dpr = transform ? Math.max(1, Math.min(3, Math.abs(transform.a))) :
+    Math.max(1, Math.min(3, (c.canvas && c.canvas.width / rect.w) || 1))
+  const size = [rect.x, rect.y, rect.w, rect.h, dpr].join(',')
+  let cached = worldCaches.get(c)
+  if (!cached || cached.size !== size) {
+    try {
+      const surface = wx.createOffscreenCanvas({ type: '2d', width: Math.ceil(rect.w * dpr), height: Math.ceil(rect.h * dpr) })
+      const context = surface.getContext('2d')
+      context.scale(dpr, dpr); context.translate(-rect.x, -rect.y)
+      cached = { size, surface, context }; worldCaches.set(c, cached)
+    } catch (error) { drawWorld(c, rect, state); return }
+  }
+  const fade = state.cleanupIn > 0 && state.cleanupIn < 1.4 ? state.cleanupIn : 0
+  const signature = [state.reaction && state.reaction.id, state.gameOver, fade,
+    ...PROPS.map(prop => !!state.propHits[prop.id]),
+    ...state.balls.flatMap(ball => [ball.id, ball.x, ball.y, ball.z, ball.asleep])].join('|')
+  if (cached.signature !== signature) {
+    drawWorld(cached.context, rect, state)
+    cached.signature = signature
+  }
+  c.drawImage(cached.surface, 0, 0, cached.surface.width, cached.surface.height, rect.x, rect.y, rect.w, rect.h)
+}
+
+function drawOffice(c, rect, state, held = false, power = 0) {
+  paintWorld(c, rect, state)
+  const project = fixedScene(c, rect).project
+  c.save()
+  c.beginPath(); c.moveTo(rect.x, rect.y); c.lineTo(rect.x + rect.w, rect.y)
+  c.lineTo(rect.x + rect.w, rect.y + rect.h); c.lineTo(rect.x, rect.y + rect.h); c.closePath(); c.clip()
   if (!state.gameOver) {
     const guide = aimGuide(rect, state)
     const aimX = guide.x; const aimY = guide.y
