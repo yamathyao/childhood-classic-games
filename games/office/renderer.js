@@ -1,5 +1,5 @@
 const { text, box } = require('../../common/canvas.js')
-const { BIN, ROOM, SOLIDS, ORIGIN, RADIUS, PEOPLE, PROPS, DEFAULT_AIM, armPoints, inBinPile, initialState } = require('./rules.js')
+const { BIN, ROOM, SOLIDS, ORIGIN, RADIUS, PEOPLE, PROPS, DEFAULT_AIM, currentBin, armPoints, inBinPile, initialState } = require('./rules.js')
 const { LINES } = require('./dialogue.js')
 const INK = '#171717'
 const MUTED = '#737373'
@@ -59,6 +59,7 @@ function camera(rect) {
 // Direction control stays monotonic even when gravity or obstacles move the landing point.
 // Use the same screen scale for touch input, so one vertical pixel drags the guide one pixel.
 function aimGuide(rect, state) {
+  const BIN = currentBin(state)
   const project = camera(rect)
   const reference = project({ x: BIN.x, y: BIN.height + .08, z: BIN.z })
   const near = rect.y + 22; const far = rect.y + rect.h - 22
@@ -70,7 +71,7 @@ function aimGuide(rect, state) {
     y: reference.y - (state.pitch - DEFAULT_AIM.pitch) * pitchScale, pitchScale }
 }
 
-function addBin(c, project, items) {
+function addBin(c, project, items, BIN) {
   const ringPoint = (angle, y, radius) => project({ x: BIN.x + Math.cos(angle) * radius,
     y, z: BIN.z + Math.sin(angle) * radius })
   const arc = (y, radius, start, end, count = 32) => Array.from({ length: count + 1 }, (_, index) =>
@@ -107,7 +108,7 @@ function floorRing(project, x, z, y, radius, count = 32) {
   })
 }
 
-function shadowHeight(ball) {
+function shadowHeight(ball, BIN) {
   let height = .004
   if (Math.hypot(ball.x - BIN.x, ball.z - BIN.z) < BIN.baseRadius && ball.y > BIN.bottom) height = BIN.bottom + .002
   for (const solid of SOLIDS) {
@@ -327,12 +328,13 @@ function addBoss(c, project, items, state) {
 // Cache fixed projections per canvas and scene size. Dynamic items still share
 // the depth sort, so furniture and opaque bin walls keep their occlusion.
 const fixedScenes = new WeakMap()
-function fixedScene(c, rect) {
-  const key = [rect.x, rect.y, rect.w, rect.h, c.canvas && c.canvas.width, c.canvas && c.canvas.height].join(',')
+function fixedScene(c, rect, state) {
+  const BIN = currentBin(state)
+  const key = [rect.x, rect.y, rect.w, rect.h, c.canvas && c.canvas.width, c.canvas && c.canvas.height, BIN.x, BIN.z].join(',')
   const previous = fixedScenes.get(c)
   if (previous && previous.key === key) return previous
   const project = camera(rect)
-  const bin = []; addBin(c, project, bin)
+  const bin = []; addBin(c, project, bin, BIN)
   const items = []
   for (const solid of SOLIDS) {
     if (solid.kind && solid.kind.startsWith('person')) continue
@@ -361,7 +363,8 @@ function fixedScene(c, rect) {
 }
 
 function drawWorld(c, rect, state) {
-  const fixed = fixedScene(c, rect)
+  const BIN = currentBin(state)
+  const fixed = fixedScene(c, rect, state)
   const project = fixed.project
   c.save()
   c.beginPath(); c.moveTo(rect.x, rect.y); c.lineTo(rect.x + rect.w, rect.y)
@@ -424,11 +427,11 @@ function drawWorld(c, rect, state) {
     const depth = inside ? Math.max(p.depth, project({ x: BIN.x, y: BIN.bottom, z: BIN.z + .08 }).depth) : p.depth
     items.push({ depth, paint: () => {
       c.save()
-      if (state.cleanupIn > 0 && state.cleanupIn < 1.4 && ball.asleep && !inBinPile(ball)) c.globalAlpha = Math.max(.1, state.cleanupIn / 1.4)
+      if (state.cleanupIn > 0 && state.cleanupIn < 1.4 && ball.asleep && !inBinPile(ball, state)) c.globalAlpha = Math.max(.1, state.cleanupIn / 1.4)
       paper(c, p.x, p.y, Math.max(1.5, RADIUS * p.scale), ball.id)
       c.restore()
     } })
-    const surfaceY = shadowHeight(ball)
+    const surfaceY = shadowHeight(ball, BIN)
     const altitude = Math.max(0, ball.y - surfaceY)
     const sx = ball.x - altitude * .2; const sz = ball.z - altitude * .13
     const shadow = project({ x: sx, y: surfaceY, z: sz })
@@ -466,7 +469,7 @@ function paintWorld(c, rect, state) {
     } catch (error) { drawWorld(c, rect, state); return }
   }
   const fade = state.cleanupIn > 0 && state.cleanupIn < 1.4 ? state.cleanupIn : 0
-  const signature = [state.reaction && state.reaction.id, state.gameOver, fade,
+  const signature = [state.binMoves || 0, state.reaction && state.reaction.id, state.gameOver, fade,
     ...PROPS.map(prop => !!state.propHits[prop.id]),
     ...state.balls.flatMap(ball => [ball.id, ball.x, ball.y, ball.z, ball.asleep])].join('|')
   if (cached.signature !== signature) {
@@ -478,7 +481,7 @@ function paintWorld(c, rect, state) {
 
 function drawOffice(c, rect, state, held = false, power = 0) {
   paintWorld(c, rect, state)
-  const project = fixedScene(c, rect).project
+  const project = fixedScene(c, rect, state).project
   c.save()
   c.beginPath(); c.moveTo(rect.x, rect.y); c.lineTo(rect.x + rect.w, rect.y)
   c.lineTo(rect.x + rect.w, rect.y + rect.h); c.lineTo(rect.x, rect.y + rect.h); c.closePath(); c.clip()
@@ -511,6 +514,7 @@ function drawOffice(c, rect, state, held = false, power = 0) {
 }
 
 function draw({ context: c, view, state, power = 0, charging = false, paused = false, warning = '' }) {
+  const BIN = currentBin(state)
   const { width, height, top } = view
   c.clearRect(0, 0, width, height); c.fillStyle = '#fff'; c.fillRect(0, 0, width, height)
   text(c, '‹  游戏合集', view.back.x + 5, view.back.y + 18, 13, INK)
@@ -519,13 +523,14 @@ function draw({ context: c, view, state, power = 0, charging = false, paused = f
     text(c, '清理纸团', view.clean.x + view.clean.w / 2, view.clean.y + 18, 12, INK, 'center')
   }
   text(c, '办公室投篮', 22, top + 61, 25, INK)
-  text(c, `墙角纸篓 · ${Math.hypot(BIN.x - ORIGIN.x, BIN.z - ORIGIN.z).toFixed(1)} 米`, 23, top + 90, 12, MUTED)
+  text(c, `${state.binMoves ? '换位纸篓' : '墙角纸篓'} · ${Math.hypot(BIN.x - ORIGIN.x, BIN.z - ORIGIN.z).toFixed(1)} 米`, 23, top + 90, 12, MUTED)
   text(c, `${state.scored} / ${state.throws}`, width - 23, top + 64, 23, INK, 'right')
   text(c, '入篓 / 已投', width - 23, top + 90, 10, MUTED, 'right')
   drawOffice(c, view.scene, state, charging, power)
   poly(c, [{ x: 22, y: view.controlsTop + 1 }, { x: width - 22, y: view.controlsTop + 1 }], null, '#ddd', 1, false)
   text(c, warning || (state.gameOver ? 'GAME OVER · 老板来了' : paused ? '已暂停 · 点击继续'
-    : charging ? `${Math.round(power * 100)}% 力度 · 松手投出` : '滑动准心调整方向 · 按住圆点蓄力'), width / 2, view.controlsTop + 21, 12, MUTED, 'center')
+    : charging ? `${Math.round(power * 100)}% 力度 · 松手投出` : state.scored >= state.nextBinAt ? '纸团落稳后，纸篓将换位置'
+      : '滑动准心调整方向 · 按住圆点蓄力'), width / 2, view.controlsTop + 21, 12, MUTED, 'center')
   if (state.gameOver) {
     box(c, view.restart, INK, 1, INK)
     text(c, '重新开始', width / 2, view.restart.y + view.restart.h / 2, 17, '#fff', 'center')
@@ -541,6 +546,7 @@ function draw({ context: c, view, state, power = 0, charging = false, paused = f
     text(c, `${Math.round(power * 100)}`, x, y, 19, '#fff', 'center')
   } else circle(c, x, y, 7, paused ? '#aaa' : INK, null)
   text(c, charging ? '松手投出' : '按住蓄力', x, y + radius + 23, 12, INK, 'center')
+  text(c, `再进 ${Math.max(0, state.nextBinAt - state.scored)} 球换位置`, 24, y, 10, MUTED)
   if (paused) {
     const rect = { x: 30, y: view.scene.y + view.scene.h / 2 - 40, w: width - 60, h: 80 }
     box(c, rect, '#fff', 2, INK)

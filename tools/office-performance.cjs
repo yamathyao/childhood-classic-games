@@ -95,6 +95,9 @@ async function browserMain() {
       state.balls.pop(); check('paper removed')
       r.launch(state, 800); check('flying paper bypasses cache')
       state.gameOver = 'people'; check('boss')
+      state.gameOver = null; state.balls = []; state.binMoves = 1; check('relocated bin at far aisle')
+      state.binMoves = 2; check('relocated bin at near aisle')
+      state.binMoves = 3; check('relocated bin at middle aisle')
       const beforeResize = creates
       state.balls.forEach(ball => { ball.asleep = true })
       render(state, true, { ...view, scene: { ...view.scene, h: view.scene.h - 12 } })

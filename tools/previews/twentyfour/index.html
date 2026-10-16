@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f2ebdb">
+  <title>算 24 点 · 玩法预览</title>
+  <style>
+    :root{--paper:#f2ebdb;--white:#fffaf0;--ink:#273d35;--muted:#827d6b;--line:#d8d0be;--green:#315747;--orange:#b45b3c;--keyboard:#e9e3d4;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--ink);background:#ded8ca;font-synthesis:none}
+    *{box-sizing:border-box}body{margin:0;min-height:100svh;display:grid;place-items:center}button,input{font:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}button:focus-visible,input:focus-visible{outline:2px solid var(--orange);outline-offset:3px}button{color:inherit}button:active{transform:translateY(2px)}
+    .game{width:100%;max-width:440px;height:100svh;min-height:552px;display:flex;flex-direction:column;background:var(--paper);overflow:hidden;position:relative}
+    .display-zone{flex:1;min-height:238px;padding:22px 24px 18px;display:flex;flex-direction:column;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18'%3E%3Ccircle cx='3' cy='7' r='.55' fill='%237d7056' opacity='.1'/%3E%3C/svg%3E")}
+    .header{display:flex;align-items:center;gap:10px;min-height:34px}.brand{width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--ink);border-radius:9px;font-family:Georgia,serif;font-size:21px;letter-spacing:-2px;padding-right:2px;background:var(--ink);color:var(--paper)}h1{font-size:19px;font-weight:650;letter-spacing:1px;margin:0}.difficulty{font-size:11px;color:var(--green);background:#dfe5d6;border:1px solid #c8d1ba;border-radius:5px;padding:4px 7px;margin-left:3px;white-space:nowrap}.help{margin-left:auto;width:32px;height:32px;border:1px solid #c9c0ad;border-radius:50%;background:transparent;font-size:17px;font-family:Georgia,serif}
+    .round-row{display:flex;align-items:center;justify-content:space-between;font-size:11px;letter-spacing:1px;color:var(--muted);margin-top:20px}.round-info{display:flex;align-items:center}.round-number{font-variant-numeric:tabular-nums}.solved-count{letter-spacing:0}.solved-count b{font-weight:600;color:var(--green)}
+    .target{display:flex;align-items:center;gap:6px;margin-left:12px;padding-left:12px;border-left:1px solid #d3c8b0}.target-label{font-size:11px;letter-spacing:0;color:var(--muted)}.target strong{font:500 24px/1 Georgia,"Times New Roman",serif;color:var(--ink)}
+    .card-table{flex:1;display:flex;align-items:center;min-height:0;padding:20px 0}.cards{--overlap:clamp(22px,7vw,30px);display:flex;width:100%;flex-shrink:0}.card{width:calc((100% + 3 * var(--overlap))/4);flex:none;margin-left:calc(-1 * var(--overlap));aspect-ratio:5/7;border:1px solid #c9bfa8;border-bottom:2px solid #b9ad95;border-radius:8px;background:#fffdf7;color:#30332f;position:relative;padding:0;box-shadow:-2px 3px 4px #766c4920,0 3px 0 #d7cdb8;transition:background .15s,border-color .15s}.card:first-child{margin-left:0}.card:focus-visible{z-index:1}.card.red{color:#ae433b}.card-face{position:absolute;inset:0;width:100%;height:100%;fill:currentColor;pointer-events:none}.corner{position:absolute;top:7px;left:7px;display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}.corner .number,.corner .rank{display:block;font:600 22px/1 Georgia,"Times New Roman",serif}.corner svg{width:13px;height:13px;fill:currentColor}.corner.bottom{top:auto;left:auto;bottom:7px;right:7px;transform:rotate(180deg)}.card-check{position:absolute;left:calc(50% - 7px);bottom:8px;width:14px;height:14px;border-radius:50%;font-size:10px;line-height:14px;color:white;background:var(--green);opacity:0}.card.used{background:#e8ebdf;border-color:#acb9a0}.card.used .corner,.card.used .card-face{opacity:.35}.card.used .card-check{opacity:1}.card:active{box-shadow:0 1px 0 #dcd2bc}
+    .display-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:15px;font-size:11px;color:var(--muted)}.swap{border:0;background:transparent;padding:3px 0 3px 6px;color:var(--green);font-size:12px;white-space:nowrap}.swap span{display:inline-block;font-size:16px;vertical-align:-1px;margin-right:3px}
+    .workspace{flex:none;border-top:1px solid #cfc6b2;background:#eae4d6;padding:15px 24px max(18px,env(safe-area-inset-bottom));position:relative}.workspace:before{content:"";position:absolute;top:-4px;left:calc(50% - 18px);width:36px;height:5px;border-radius:3px;background:#c4baa3}.formula-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;line-height:20px;margin-bottom:9px}.label-left{display:flex;align-items:center;gap:7px;font-weight:600}.label-dot{width:5px;height:5px;background:var(--orange);border-radius:50%}.formula-label small{font-size:10px;font-weight:400;color:var(--muted)}
+    .formula-box{height:62px;display:flex;align-items:center;border:1px solid #bcb49f;border-radius:9px;background:#faf6eb;padding:0 13px;gap:8px;box-shadow:inset 0 2px 3px #796b4b0a}.formula-box:focus-within{border-color:var(--green)}.formula-box.correct{border-color:var(--green);background:#f1f5e8}.formula-box.incorrect{border-color:var(--orange)}.expression{width:0;flex:1;border:0;outline:none!important;background:transparent;color:var(--ink);font-family:"Courier New",monospace;font-size:24px;letter-spacing:.5px;padding:10px 0;caret-color:var(--green)}.expression::placeholder{font-family:inherit;font-size:17px;color:#a49b87;letter-spacing:0}.equals{font-family:Georgia,serif;font-size:22px;white-space:nowrap;color:#a49b87}.correct .equals{color:var(--green)}
+    .feedback{font-size:11px;line-height:17px;min-height:44px;margin:0;display:flex;align-items:center;color:var(--muted);padding:5px 1px;overflow-wrap:anywhere}.feedback.error{color:#a2452c}.feedback.success{color:var(--green);font-weight:600}.feedback.hint{color:#725e2f}
+    .keyboard{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;width:100%;max-width:290px;margin:0 auto}.key{height:clamp(36px,5.6svh,40px);display:grid;place-items:center;padding:0;border:1px solid #cfc7b6;border-bottom:2px solid #c4baa5;border-radius:6px;background:#fffaf1;box-shadow:0 1px 0 #d4cbb8;font-size:21px;font-weight:500;line-height:1;user-select:none}.key:active{box-shadow:none}.key.op{background:#dce3d5;border-color:#c1ccb5;border-bottom-color:#b1c0a3;color:var(--green);font-size:23px}.key.utility{background:#e2dac9;color:#726a58;font-size:11px;font-weight:400}.key.bracket{background:#eee8db;color:#79705c;font-size:20px}.key.delete svg{width:18px;height:18px}.key.hint-key{color:#8c6442;background:#eee0c9}.key.submit{background:var(--green);border-color:var(--green);border-bottom-color:#213e32;color:var(--white);font-size:24px}.key.submit.solved{background:#b45b3c;border-color:#b45b3c;border-bottom-color:#89452e}.key:disabled{opacity:.6;cursor:default}
+    .desktop-note{display:none}dialog{border:1px solid #c4b89d;border-radius:16px;width:min(340px,calc(100vw - 40px));padding:25px;background:var(--white);color:var(--ink);box-shadow:0 20px 80px #15251d30}dialog::backdrop{background:#22362a70}dialog h2{font-size:21px;margin:0 0 15px}dialog p{font-size:13px;line-height:1.9;color:#6e6a5d;margin:9px 0}dialog strong{color:var(--ink)}.help-example{font:18px/1.6 "Courier New",monospace;background:#e6eadb;padding:12px;border-radius:7px;text-align:center;margin:17px 0}.close-help{width:100%;border:0;border-radius:8px;background:var(--green);color:var(--white);height:42px;margin-top:10px;font-size:14px}
+    @media(min-width:600px) and (min-height:650px){.game{height:min(820px,calc(100svh - 70px));border:1px solid #c4bba5;border-radius:22px;box-shadow:0 18px 65px #51452f1e}.desktop-note{display:block;position:fixed;bottom:12px;font-size:11px;letter-spacing:2px;color:#8b8372}}
+    @media(max-height:680px){.display-zone{padding:14px 20px 13px;min-height:266px}.header{min-height:30px}.brand{width:29px;height:29px;font-size:20px}h1{font-size:18px}.round-row{margin-top:12px;font-size:10px}.display-footer{margin-top:11px;font-size:10px}.workspace{padding:13px 20px max(15px,env(safe-area-inset-bottom))}.formula-box{height:51px}.formula-label{margin-bottom:6px}.feedback{min-height:39px;font-size:10px;line-height:16px}.expression{font-size:22px}}
+    @media(max-height:600px){.display-zone{padding:12px 20px;min-height:270px}.header,.help{min-height:30px;height:30px}.round-row{margin-top:10px;line-height:12px}.corner .number,.corner .rank{font-size:20px}.card-table{padding:12px 0}.display-footer{margin-top:9px;line-height:14px}.swap{padding-top:1px;padding-bottom:1px;line-height:18px}.workspace{padding:11px 20px max(12px,env(safe-area-inset-bottom))}.formula-box{height:46px}.formula-label{margin-bottom:4px}.feedback{min-height:33px}}
+    @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+  </style>
+</head>
+<body>
+  <main class="game" aria-label="算24点小游戏">
+    <section class="display-zone" aria-label="题目展示区">
+      <header class="header"><div class="brand" aria-hidden="true">24</div><h1>算 24 点</h1><span class="difficulty">简单</span><button class="help" aria-label="查看玩法">?</button></header>
+      <div class="round-row"><div class="round-info"><span class="round-number">第 01 题</span><span class="target"><span class="target-label">目标</span><strong>24</strong></span></div><span class="solved-count">已解 <b id="solved-count">0</b> 题</span></div>
+      <div class="card-table"><div class="cards" aria-label="本题四个数字"></div></div>
+      <div class="display-footer"><span>四个数字各用一次 · 顺序不限</span><button class="swap"><span aria-hidden="true">↻</span>换一题</button></div>
+    </section>
+    <section class="workspace" aria-label="算式输入区">
+      <label class="formula-label" for="expression"><span class="label-left"><span class="label-dot"></span>你的算式</span><small>先乘除，后加减 · 可用括号</small></label>
+      <div class="formula-box"><input class="expression" id="expression" aria-label="算式，使用下方数字和符号键盘输入" type="text" inputmode="none" autocomplete="off" spellcheck="false" placeholder="从这里开始…"><span class="equals" aria-hidden="true">= ?</span></div>
+      <p class="feedback" role="status" aria-live="polite">点数字卡片或下方键盘，慢慢来。</p>
+      <div class="keyboard" aria-label="数字和运算符键盘">
+        <button class="key" data-key="7">7</button><button class="key" data-key="8">8</button><button class="key" data-key="9">9</button><button class="key op" data-key="÷" aria-label="除">÷</button><button class="key utility delete" data-action="delete" aria-label="删除前一个字符"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 5h11v14H9l-7-7Z" stroke-linejoin="round"/><path d="m12 9 6 6m0-6-6 6"/></svg></button>
+        <button class="key" data-key="4">4</button><button class="key" data-key="5">5</button><button class="key" data-key="6">6</button><button class="key op" data-key="×" aria-label="乘">×</button><button class="key bracket" data-key="(" aria-label="左括号">(</button>
+        <button class="key" data-key="1">1</button><button class="key" data-key="2">2</button><button class="key" data-key="3">3</button><button class="key op" data-key="−" aria-label="减">−</button><button class="key bracket" data-key=")" aria-label="右括号">)</button>
+        <button class="key utility hint-key" data-action="hint">提示</button><button class="key" data-key="0">0</button><button class="key utility" data-action="clear">清空</button><button class="key op" data-key="+" aria-label="加">+</button><button class="key submit" data-action="submit" aria-label="验证算式">=</button>
+      </div>
+    </section>
+  </main>
+  <div class="desktop-note">童年经典 · 玩法预览</div>
+  <dialog id="help-dialog" aria-labelledby="help-title"><h2 id="help-title">四个数字，算出 24。</h2><p>把题目中的<strong>四个数字各用一次</strong>，用加、减、乘、除组成结果等于 24 的算式。数字不能拼接，顺序可以调整，也可以使用括号。</p><div class="help-example">(1 + 2 + 3) × 4 = 24</div><p>题目都有简单解法，不限时。点「提示」先看思路，再点一次查看参考答案；解法不止一种。</p><p>可点下方专用键盘，也支持电脑数字键、+ − * /、括号、退格与 Enter。点算式可定位，方向键可移动光标。</p><button class="close-help">知道了，开始算</button></dialog>
+  <script src="../../../games/twentyfour/rules.js"></script>
+  <script>
+    ;(() => {
+      const rules = TwentyFour
+      const input = document.querySelector('.expression'); const field = document.querySelector('.formula-box')
+      const feedback = document.querySelector('.feedback'); const submit = document.querySelector('.submit')
+      const cards = document.querySelector('.cards'); const dialog = document.querySelector('dialog')
+      let puzzle = rules.puzzles[0]; let deck = rules.shuffledPuzzles().filter(item => item.id !== puzzle.id)
+      let round = 1; let solved = 0; let counted = false; let completed = false; let hintLevel = 0
+      function message(text, type = '') { feedback.textContent = text; feedback.className = 'feedback ' + type }
+      function renderUsage() {
+        const used = rules.usage(input.value, puzzle.numbers)
+        cards.querySelectorAll('.card').forEach((card, index) => { card.classList.toggle('used', used[index]); card.setAttribute('aria-label', `数字 ${puzzle.numbers[index]}${used[index] ? '，已使用' : ''}`) })
+      }
+      function editing() {
+        completed = false; field.classList.remove('correct', 'incorrect'); submit.textContent = '='; submit.classList.remove('solved'); submit.setAttribute('aria-label', '验证算式')
+        document.querySelector('.equals').textContent = '= ?'; renderUsage(); message('四个数字各用一次，算好后点「=」验证。')
+      }
+      function focusAt(position) { input.focus({ preventScroll: true }); input.setSelectionRange(position, position) }
+      function insert(text) {
+        if (input.value.length + text.length - (input.selectionEnd - input.selectionStart) > 64) { message('算式太长了，试试更简洁的写法。', 'error'); return }
+        const start = input.selectionStart; const end = input.selectionEnd
+        input.value = input.value.slice(0, start) + rules.display(text) + input.value.slice(end)
+        focusAt(start + text.length); editing()
+      }
+      function remove(forward = false) {
+        let start = input.selectionStart; let end = input.selectionEnd
+        if (start === end) { if (forward) end = Math.min(input.value.length, end + 1); else start = Math.max(0, start - 1) }
+        input.value = input.value.slice(0, start) + input.value.slice(end); focusAt(start); editing()
+      }
+      function clear() { input.value = ''; focusAt(0); editing() }
+      function next() {
+        if (!deck.length) deck = rules.shuffledPuzzles().filter(item => item.id !== puzzle.id)
+        puzzle = deck.pop(); round++; counted = false; completed = false; hintLevel = 0
+        document.querySelector('.round-number').textContent = `第 ${String(round).padStart(2, '0')} 题`
+        document.querySelector('.hint-key').textContent = '提示'; renderPuzzle(); clear(); message('新题来了，试试把它们凑成 24。')
+      }
+      function validate() {
+        if (completed) { next(); return }
+        const result = rules.check(input.value, puzzle.numbers)
+        field.classList.toggle('correct', result.ok); field.classList.toggle('incorrect', !result.ok)
+        message(result.ok ? '正好 24！点「→」继续下一题。' : result.message, result.ok ? 'success' : 'error')
+        if (result.ok) {
+          completed = true
+          if (!counted) { solved++; counted = true; document.querySelector('#solved-count').textContent = solved }
+          document.querySelector('.equals').textContent = '= 24'; submit.textContent = '→'; submit.classList.add('solved'); submit.setAttribute('aria-label', '下一题')
+        }
+      }
+      function hint() {
+        hintLevel++
+        if (completed) { message('已经解开啦！点「→」试试下一题。', 'success'); return }
+        if (hintLevel === 1) { message(puzzle.hint, 'hint'); document.querySelector('.hint-key').textContent = '答案' }
+        else message('参考：' + rules.display(puzzle.solution) + ' = 24。也可以找找别的解法。', 'hint')
+      }
+      function renderPuzzle() {
+        const suits = [
+          { red: false, path: 'M0-9C-3-5-9-2-9 2A5 5 0 0 0-1 6L-3 10H3L1 6A5 5 0 0 0 9 2C9-2 3-5 0-9Z' },
+          { red: true, path: 'M0 9-8 1C-15-8-3-13 0-6C3-13 15-8 8 1Z' },
+          { red: false, path: 'M0-9A4.5 4.5 0 0 0-4-2A4.5 4.5 0 1 0-1 6L-3 10H3L1 6A4.5 4.5 0 1 0 4-2A4.5 4.5 0 0 0 0-9Z' },
+          { red: true, path: 'M0-10 8 0 0 10-8 0Z' }
+        ]
+        const rows = ys => ys.flatMap(y => [[34, y], [66, y]])
+        const positions = {
+          1: [[50, 70]], 2: [[50, 39], [50, 101]], 3: [[50, 39], [50, 70], [50, 101]],
+          4: rows([39, 101]), 5: [...rows([39, 101]), [50, 70]], 6: rows([39, 70, 101]),
+          7: [...rows([39, 70, 101]), [50, 54]], 8: [...rows([39, 70, 101]), [50, 54], [50, 86]],
+          9: [...rows([32, 57, 83, 108]), [50, 70]]
+        }
+        cards.replaceChildren(...puzzle.numbers.map((number, index) => {
+          const suit = suits[index]; const card = document.createElement('button'); card.className = 'card' + (suit.red ? ' red' : '')
+          const symbol = `<svg viewBox="-12 -12 24 24" aria-hidden="true"><path d="${suit.path}"/></svg>`
+          const pips = positions[number].map(([x, y]) => `<path class="pip" d="${suit.path}" transform="translate(${x} ${y}) rotate(${y > 70 ? 180 : 0}) scale(${number === 1 ? 2 : 1})"/>`).join('')
+          card.innerHTML = `<svg class="card-face" viewBox="0 0 100 140" aria-hidden="true">${pips}</svg><span class="corner"><span class="number">${number}</span>${symbol}</span><span class="corner bottom" aria-hidden="true"><span class="rank">${number}</span>${symbol}</span><span class="card-check" aria-hidden="true">✓</span>`
+          card.addEventListener('pointerdown', event => event.preventDefault()); card.addEventListener('click', () => insert(String(number))); return card
+        })); renderUsage()
+      }
+      document.querySelector('.keyboard').addEventListener('pointerdown', event => { if (event.target.closest('button')) event.preventDefault() })
+      document.querySelector('.keyboard').addEventListener('click', event => {
+        const button = event.target.closest('button'); if (!button) return
+        if (button.dataset.key) insert(button.dataset.key)
+        else ({ delete: remove, clear, submit: validate, hint })[button.dataset.action]()
+      })
+      document.querySelector('.swap').addEventListener('click', next)
+      document.querySelector('.help').addEventListener('click', () => dialog.showModal())
+      document.querySelector('.close-help').addEventListener('click', () => dialog.close())
+      dialog.addEventListener('click', event => { if (event.target === dialog) { const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close() } })
+      document.addEventListener('keydown', event => {
+        if (dialog.open || event.ctrlKey || event.metaKey || event.altKey || event.isComposing) return
+        if (/^[0-9+\-*/()×÷−]$/.test(event.key)) { event.preventDefault(); insert(event.key) }
+        else if (event.key === 'Backspace' || event.key === 'Delete') { event.preventDefault(); remove(event.key === 'Delete') }
+        else if (event.key === 'Escape') { event.preventDefault(); clear() }
+        else if ((event.key === 'Enter' || event.key === '=') && (event.target === input || event.target === document.body)) { event.preventDefault(); validate() }
+      })
+      input.addEventListener('beforeinput', event => {
+        event.preventDefault()
+        if (event.inputType === 'deleteContentBackward') remove()
+        else if (event.inputType === 'deleteContentForward') remove(true)
+        else if (event.data && /^[0-9+\-*/()×÷−]+$/.test(event.data)) insert(event.data)
+        else if (event.data) message('只支持数字、加减乘除和括号。', 'error')
+      })
+      input.addEventListener('paste', event => {
+        event.preventDefault(); const text = event.clipboardData.getData('text').replace(/\s/g, '')
+        if (/^[0-9+\-*/()×÷−]+$/.test(text)) insert(text)
+        else message('只能粘贴数字、加减乘除和括号。', 'error')
+      })
+      renderPuzzle(); input.setSelectionRange(0, 0)
+    })()
+  </script>
+</body>
+</html>

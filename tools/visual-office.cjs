@@ -13,7 +13,8 @@ async function main() {
   const preview = path.join(output, 'preview.html')
   fs.writeFileSync(preview, '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>办公室投篮 · 本地预览</title><style>html,body{margin:0;overflow:hidden}canvas{width:100vw;height:100vh;touch-action:none;display:block}</style><canvas></canvas><script>(' + browserBoot.toString() + ')(' + JSON.stringify({ modules, images: {} }).replace(/</g, '\\u003c') + ')</script>')
   const featuresOnly = process.argv.includes('--features-only')
-  const overflowing = featuresOnly ? null : rules.snapshot(fullBin())
+  const relocationOnly = process.argv.includes('--relocation-only')
+  const overflowing = featuresOnly || relocationOnly ? null : rules.snapshot(fullBin())
   const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_EXECUTABLE || undefined })
   try {
     for (const [width, height] of [[320, 568], [375, 667], [390, 844]]) {
@@ -26,13 +27,19 @@ async function main() {
         const t = await page.evaluate(label => qa.texts.find(t => t.text === label) || qa.texts.find(t => t.text.includes(label)), label)
         assert.ok(t, 'missing control: ' + label); await page.mouse.click(t.x, t.y)
       }
-      const scrollToOffice = () => page.evaluate(() => {
+      const scrollToOffice = async () => {
+        // Collection may grow; find the office card instead of assuming the
+        // last scroll position still contains it.
+        await page.evaluate(() => {
+        const office = qa.texts.find(t => t.text === '办公室投篮')
         const t = { clientX: 180, clientY: innerHeight - 100, identifier: 99 }
-        const end = { ...t, clientY: -2000 }
+        const end = { ...t, clientY: t.clientY - (office ? office.y - innerHeight * .5 : 1000) }
         qa.emit('TouchStart', { changedTouches: [t], touches: [t] })
         qa.emit('TouchMove', { changedTouches: [end], touches: [end] })
         qa.emit('TouchEnd', { changedTouches: [end], touches: [] })
-      })
+        })
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
+      }
       await scrollToOffice()
       await page.screenshot({ path: path.join(output, `collection-${width}.png`) })
       await click('办公室投篮')
@@ -42,6 +49,42 @@ async function main() {
       const throwPaper = async milliseconds => {
         await page.mouse.move(view.charge.x, view.charge.y); await page.mouse.down()
         await page.waitForTimeout(milliseconds); await page.mouse.up()
+      }
+      if (relocationOnly) {
+        await click('游戏合集')
+        await page.evaluate(() => {
+          const r = qa.load('games/office/rules.js'); const s = r.initialState()
+          Object.assign(s, { scored: 4, throws: 4, cleared: 4, clearedScored: 4, nextId: 5 })
+          wx.setStorageSync(r.SAVE_KEY, r.snapshot(s))
+        })
+        await scrollToOffice(); await click('办公室投篮'); await click('继续投篮')
+        assert.ok(await page.evaluate(() => qa.texts.some(t => t.text === '再进 1 球换位置')))
+        await page.screenshot({ path: path.join(output, `before-relocation-${width}.png`) })
+        await throwPaper(1120)
+        await page.waitForFunction(() => {
+          const s = wx.getStorageSync('office.paper-toss.v1')
+          return s.binMoves === 1 && s.balls.every(ball => ball.asleep)
+        }, null, { timeout: 8000 })
+        assert.ok(await page.evaluate(() => qa.texts.some(t => t.text === '再进 5 球换位置')))
+        await page.screenshot({ path: path.join(output, `relocation-1-${width}.png`) })
+        await page.reload(); await page.waitForFunction(() => window.qa)
+        await scrollToOffice(); await click('办公室投篮'); await click('继续投篮')
+        assert.equal(await page.evaluate(() => wx.getStorageSync('office.paper-toss.v1').binMoves), 1)
+        await click('游戏合集')
+        for (const moves of [2, 3]) {
+          await page.evaluate(moves => {
+            const r = qa.load('games/office/rules.js'); const s = r.initialState()
+            Object.assign(s, { binMoves: moves, nextBinAt: (moves + 1) * 5, scored: moves * 5,
+              throws: moves * 5, cleared: moves * 5, clearedScored: moves * 5, nextId: moves * 5 + 1 })
+            wx.setStorageSync(r.SAVE_KEY, r.snapshot(s))
+          }, moves)
+          await scrollToOffice(); await click('办公室投篮'); await click('继续投篮')
+          await page.screenshot({ path: path.join(output, `relocation-${moves}-${width}.png`) })
+          await click('游戏合集')
+        }
+        assert.deepEqual(errors, [])
+        console.log(`${width}x${height}: fifth-basket relocation, progress hint, all positions and reload passed`)
+        await page.close(); continue
       }
       // Observe the drawn crosshair, then reproduce the high-angle reversal with real swipes.
       await page.evaluate(() => {
@@ -149,10 +192,13 @@ async function main() {
       await page.evaluate(() => {
         const r = qa.load('games/office/rules.js'); const state = r.initialState()
         for (let shot = 0; shot < 18; shot++) {
-          r.launch(state, 1120)
-          for (let frame = 0; frame < 180; frame++) r.tick(state, 1000 / 60)
+          const bin = r.currentBin(state)
+          state.yaw = Math.atan2(bin.x - r.ORIGIN.x, bin.z - r.ORIGIN.z); state.pitch = .8
+          const index = state.binMoves === 0 ? 0 : 1 + (state.binMoves - 1) % 3
+          r.launch(state, [1020, 1010, 560, 790][index])
+          for (let frame = 0; frame < 300; frame++) r.tick(state, 1000 / 60)
         }
-        state.yaw = r.DEFAULT_AIM.yaw - .28; r.launch(state, 250)
+        state.yaw = r.DEFAULT_AIM.yaw - .28; state.pitch = r.DEFAULT_AIM.pitch; r.launch(state, 250)
         for (let frame = 0; frame < 480; frame++) r.tick(state, 1000 / 60)
         state.yaw = r.DEFAULT_AIM.yaw
         wx.setStorageSync(r.SAVE_KEY, r.snapshot(state))

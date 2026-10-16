@@ -7,6 +7,7 @@ const driller = require('./games/driller/game.js')
 const textbattle = require('./games/textbattle/game.js')
 const office = require('./games/office/game.js')
 const bicycle = require('./games/bicycle/game.js')
+const twentyfour = require('./games/twentyfour/game.js')
 
 const canvas = wx.createCanvas()
 const context = canvas.getContext('2d')
@@ -37,6 +38,7 @@ function goHome() {
     if (id === 'textbattle') showScene(textbattle, { goHome })
     if (id === 'office') showScene(office, { goHome })
     if (id === 'bicycle') showScene(bicycle, { goHome })
+    if (id === 'twentyfour') showScene(twentyfour, { goHome })
   } })
 }
 

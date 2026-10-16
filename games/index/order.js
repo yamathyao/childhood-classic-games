@@ -7,7 +7,8 @@ const games = [
   { id: 'driller', name: '钻地挑战', category: '矿层冒险' },
   { id: 'textbattle', name: '文字对战', category: '策略对战' },
   { id: 'office', name: '办公室投篮', category: '轻松一投' },
-  { id: 'bicycle', name: '自行车大冒险', category: '山野速降' }
+  { id: 'bicycle', name: '自行车大冒险', category: '山野速降' },
+  { id: 'twentyfour', name: '算 24 点', category: '经典益智' }
 ]
 const saveKey = 'collection.order.v1'
 const longPressMs = 550
@@ -28,11 +29,11 @@ function moveGame(order, id, index) {
 function sortLayout(screen) {
   const { width, height, top, bottom } = screen
   const compact = height - top - bottom < 540
-  const gap = compact ? 6 : 10
-  const rowHeight = Math.min(104, Math.max(44, (height - top - bottom - (compact ? 184 : 208) - gap * (games.length - 1)) / games.length))
-  const listTop = top + (compact ? 90 : 108)
+  const gap = compact ? 4 : 8
+  const rowHeight = Math.min(104, Math.max(36, (height - top - bottom - (compact ? 148 : 208) - gap * (games.length - 1)) / games.length))
+  const listTop = top + (compact ? 60 : 108)
   const rows = games.map((_, index) => ({ x: 22, y: listTop + index * (rowHeight + gap), w: width - 44, h: rowHeight }))
-  const actionsY = height - bottom - 64
+  const actionsY = height - bottom - (compact ? 56 : 64)
   return {
     rows, listTop, rowHeight, stride: rowHeight + gap,
     cancel: { x: 22, y: actionsY, w: (width - 56) / 2, h: 44 },
@@ -43,9 +44,10 @@ function sortLayout(screen) {
 
 function drawSort(c, screen, order, drag, selected, warning, drawPreview) {
   const view = sortLayout(screen)
-  text(c, '游 戏 馆  /  自 定 义', 25, screen.top + 25, 11, P.wine)
-  text(c, '排列你的游戏', 24, screen.top + 61, 26, P.ink, 'left', true)
-  text(c, '按住任意卡片上下拖动，松手放置', 25, screen.top + 89, 12, P.muted)
+  const compact = screen.height - screen.top - screen.bottom < 540
+  if (!compact) text(c, '游 戏 馆  /  自 定 义', 25, screen.top + 25, 11, P.wine)
+  text(c, '排列你的游戏', 24, screen.top + (compact ? 21 : 61), compact ? 23 : 26, P.ink, 'left', true)
+  text(c, '按住任意卡片上下拖动，松手放置', 25, screen.top + (compact ? 47 : 89), compact ? 11 : 12, P.muted)
   function drawRow(id, rect, index, floating = false) {
     const game = games.find(game => game.id === id)
     c.save()
