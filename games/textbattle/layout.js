@@ -55,8 +55,8 @@ function layout({ width, height, top = 0, bottom = 0 }, prepare = false) {
     growthHome: { x: margin + 14, y: growthDialog.y + 434, w: (w - 40) * .25, h: 32 },
     growthRestart: { x: margin + 20 + (w - 40) * .25, y: growthDialog.y + 434, w: (w - 40) * .3, h: 32 },
     growthConfirm: { x: margin + 26 + (w - 40) * .55, y: growthDialog.y + 434, w: (w - 40) * .45, h: 32 },
-    guideTabs: Array.from({ length: 4 }, (_, index) => ({ x: guideDialog.x + 12 + index * (w - 18) / 4,
-      y: guideDialog.y + 54, w: (w - 42) / 4, h: 30 })),
+    guideTabs: Array.from({ length: 3 }, (_, index) => ({ x: guideDialog.x + 12 + index * (w - 18) / 3,
+      y: guideDialog.y + 54, w: (w - 36) / 3, h: 30 })),
     guidePrimary: { ...modalButton(1), y: guideDialog.y + guideDialog.h - 56 },
     guideSecondary: { ...modalButton(0), y: guideDialog.y + guideDialog.h - 56 },
     modalPrimary: modalButton(1), modalSecondary: modalButton(0) }

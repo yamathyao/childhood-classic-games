@@ -1,11 +1,11 @@
 // Growth belongs to this challenge; the original character roll stays intact.
 const upgrades = [
-  { id: 'atk', name: '淬锋', label: '攻击', amount: 1, cap: 99, note: '每次出招都更有分量', color: '#ec937f' },
-  { id: 'hp', name: '养元', label: '生命上限', amount: 12, cap: 99, note: '多一分余裕，再迎下一战', color: '#7ccddd' },
-  { id: 'def', name: '固守', label: '防御', amount: 1, cap: 99, note: '减轻受击，稳住阵脚', color: '#b3c9ee' },
-  { id: 'spd', name: '疾行', label: '攻速', amount: .04, cap: 12, note: '出手更快，武势积攒更频繁', color: '#8fd5bd' },
-  { id: 'crit', name: '破绽', label: '暴击', amount: 4, cap: 8, note: '抓住破绽，争取致命一击', color: '#e8be71' },
-  { id: 'dodge', name: '轻身', label: '闪避', amount: 3, cap: 8, note: '避开攻势，闪避也可蓄势', color: '#ccb2e9' }
+  { id: 'atk', name: '淬锋', label: '攻击', amount: 1, note: '每次出招都更有分量', color: '#ec937f' },
+  { id: 'hp', name: '养元', label: '生命上限', amount: 12, note: '多一分余裕，再迎下一战', color: '#7ccddd' },
+  { id: 'def', name: '固守', label: '防御', amount: 1, note: '减轻受击，稳住阵脚', color: '#b3c9ee' },
+  { id: 'spd', name: '疾行', label: '攻速', amount: .04, note: '出手更快，武势积攒更频繁', color: '#8fd5bd' },
+  { id: 'crit', name: '破绽', label: '暴击', amount: 4, note: '抓住破绽，争取致命一击', color: '#e8be71' },
+  { id: 'dodge', name: '轻身', label: '闪避', amount: 3, note: '避开攻势，闪避也可蓄势', color: '#ccb2e9' }
 ]
 const gain = Object.fromEntries(upgrades.map(item => [item.id, item.amount]))
 const qualities = [
@@ -20,12 +20,14 @@ const fixedAmounts = {
   crit: { normal: 2, fine: 4, epic: 6, legendary: 10 }, dodge: { normal: 2, fine: 4, epic: 6, legendary: 10 }
 }
 const fixedLimits = { hp: 200, def: 6 }
+// Retained only to validate and resume battles saved before uncapped growth.
+const legacyCaps = { atk: 99, hp: 99, def: 99, spd: 12, crit: 8, dodge: 8 }
 const activeQualities = growth => growth.version >= 3 ? qualities : qualities.slice(0, 3)
 const zeroCounts = () => Object.fromEntries(upgrades.map(item => [item.id, 0]))
 // Attack uses whole points so every quality has a distinct, visible increase.
 const potency = (item, quality) => item.id === 'atk' ? (quality.id === 'legendary' ? 5 : qualities.indexOf(quality) + 1) : quality.multiplier
 const baseAmount = (item, growth) => item.id === 'def' && growth.version < 4 ? 2 : item.amount
-function fresh() { return { version: 5, counts: zeroCounts(), qualities: Object.fromEntries(qualities.map(item => [item.id, zeroCounts()])), pending: false } }
+function fresh() { return { version: 6, counts: zeroCounts(), qualities: Object.fromEntries(qualities.map(item => [item.id, zeroCounts()])), pending: false } }
 function copy(value) {
   return { ...value, counts: { ...value.counts }, ...(value.qualities ? {
     qualities: Object.fromEntries(activeQualities(value).map(item => [item.id, { ...value.qualities[item.id] }]))
@@ -44,7 +46,8 @@ function qualityCount(growth, id, quality) {
   return growth.qualities[quality] ? growth.qualities[quality][id] : 0
 }
 function promote(growth) {
-  if (growth.version === 5) return growth
+  if (growth.version >= 6) return growth
+  if (growth.version === 5) return { ...copy(growth), version: 6 }
   const value = fresh(); value.counts = { ...growth.counts }; value.pending = growth.pending
   if (growth.version === 1) value.qualities.normal = { ...growth.counts }
   else for (const quality of activeQualities(growth)) value.qualities[quality.id] = { ...growth.qualities[quality.id] }
@@ -67,6 +70,8 @@ function owned(growth) {
 function apply(attributes, growth) {
   if (!growth) return attributes
   const n = units(growth)
+  if (growth.version >= 6) return { ...attributes, maxHp: attributes.maxHp + n.hp, atk: attributes.atk + n.atk,
+    def: attributes.def + n.def, spd: attributes.spd + n.spd, crit: attributes.crit + n.crit, dodge: attributes.dodge + n.dodge }
   if (growth.version >= 5) return { ...attributes, maxHp: attributes.maxHp + Math.min(fixedLimits.hp, n.hp), atk: attributes.atk + n.atk, def: attributes.def + Math.min(fixedLimits.def, n.def), spd: Math.min(4, attributes.spd + n.spd), crit: Math.min(60, attributes.crit + n.crit), dodge: Math.min(45, attributes.dodge + n.dodge) }
   return { ...attributes, maxHp: attributes.maxHp + n.hp * gain.hp, atk: attributes.atk + n.atk * gain.atk,
     def: attributes.def + n.def * (growth.version >= 4 ? gain.def : 2), spd: Math.min(4, attributes.spd * (1 + n.spd * gain.spd)),
@@ -85,13 +90,14 @@ function total(value) { return upgrades.reduce((sum, item) => sum + value.counts
 function valid(value, state) {
   if (value && value.legacy) {
     const old = value.legacy
-    if (value.version !== 5 || !value.counts || !value.qualities || !old.counts || ![1, 2, 3, 4].includes(old.version) || old.legacy || old.pending !== false ||
+    if (![5, 6].includes(value.version) || !value.counts || !value.qualities || !old.counts || ![1, 2, 3, 4].includes(old.version) || old.legacy || old.pending !== false ||
       !valid(old, { round: total(old) + 1, status: 'prepare' }) ||
       upgrades.some(item => old.counts[item.id] > value.counts[item.id]) ||
       activeQualities(old).some(q => !value.qualities[q.id] || upgrades.some(item => qualityCount(old, item.id, q.id) > value.qualities[q.id][item.id]))) return false
   }
-  return value && [1, 2, 3, 4, 5].includes(value.version) && typeof value.pending === 'boolean' && value.counts &&
-    upgrades.every(item => Number.isInteger(value.counts[item.id]) && value.counts[item.id] >= 0 && value.counts[item.id] <= item.cap) &&
+  return value && [1, 2, 3, 4, 5, 6].includes(value.version) && typeof value.pending === 'boolean' && value.counts &&
+    upgrades.every(item => Number.isSafeInteger(value.counts[item.id]) && value.counts[item.id] >= 0 &&
+      (value.version >= 6 || value.counts[item.id] <= legacyCaps[item.id])) &&
     (value.version === 1 ? value.qualities === undefined : value.qualities && activeQualities(value).every(quality => value.qualities[quality.id] &&
       upgrades.every(item => Number.isInteger(value.qualities[quality.id][item.id]) && value.qualities[quality.id][item.id] >= 0)) &&
       upgrades.every(item => activeQualities(value).reduce((sum, quality) => sum + value.qualities[quality.id][item.id], 0) === value.counts[item.id]) &&
@@ -113,7 +119,8 @@ function candidates(state) {
   let seed = (state.runId ^ Math.imul(state.round, 0x9e3779b9)) >>> 0 || 1
   const fixedGrowth = state.progression.version >= 5 ? units(state.progression) : null
   const available = upgrades.filter(item => {
-    if (state.progression.counts[item.id] >= item.cap) return false
+    if (state.progression.version >= 6) return true
+    if (state.progression.counts[item.id] >= legacyCaps[item.id]) return false
     if (fixedGrowth && fixedLimits[item.id] && fixedGrowth[item.id] >= fixedLimits[item.id]) return false
     const key = item.id === 'hp' ? 'maxHp' : item.id
     const limit = { spd: 4, crit: 60, dodge: 45 }[key]

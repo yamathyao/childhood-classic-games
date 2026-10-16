@@ -59,6 +59,36 @@ function boot(options = {}) {
     writes: () => writes, paints: () => paints }
 }
 
+test('fifth basket relocation survives pause, background and reload; cleanup restores the initial target', () => {
+  const seed = rules.initialState()
+  Object.assign(seed, { scored: 4, throws: 4, cleared: 4, clearedScored: 4, nextId: 5 })
+  const storage = new Map([[rules.SAVE_KEY, rules.snapshot(seed)]])
+  const game = boot({ storage }); const view = layout(game.screen)
+  assert.ok(game.texts.some(item => item.value === '再进 1 球换位置'))
+  game.charge(1120); game.flush(1000); game.tap(view.pause)
+  const pending = rules.snapshot(game.state())
+  assert.equal(pending.scored, 5); assert.equal(pending.binMoves, 0)
+  game.flush(10000); assert.equal(game.state().binMoves, 0)
+  game.scene.hide(); game.scene.show()
+  assert.equal(game.state().binMoves, 0); assert.equal(game.frames.size, 0)
+  game.scene.dispose()
+  const resumed = boot({ storage })
+  resumed.flush(6000)
+  assert.equal(resumed.state().binMoves, 1); assert.equal(resumed.state().nextBinAt, 10)
+  assert.ok(resumed.texts.some(item => item.value === '再进 5 球换位置'))
+  assert.ok(resumed.texts.some(item => item.value.includes('换位纸篓')))
+  assert.equal(resumed.frames.size, 0)
+  resumed.scene.dispose()
+  const reloaded = boot({ storage })
+  assert.equal(reloaded.frames.size, 0); assert.equal(reloaded.state().binMoves, 1)
+  reloaded.scene.resize({ ...reloaded.screen, width: 390, height: 844 })
+  assert.equal(reloaded.state().binMoves, 1)
+  reloaded.tap(layout({ ...reloaded.screen, width: 390, height: 844 }).clean)
+  assert.equal(reloaded.state().binMoves, 0); assert.equal(reloaded.state().scored, 0)
+  assert.equal(reloaded.state().nextBinAt, 5)
+  reloaded.scene.dispose()
+})
+
 test('full charge stops idle redraws and writes but release still launches at full power', () => {
   const game = boot(); const view = layout(game.screen)
   game.emit('Start', view.charge.x, view.charge.y); game.flush(1700)

@@ -1,5 +1,5 @@
 const { box, path, text, gradient, headerButton } = require('../../common/canvas.js')
-const { weapons, stances, stanceCatalog, skill, weaponSkills, weaponSkill, momentum, counters, relation, upgradeChoices, upgradePreview, ownedUpgrades, upgradeOdds } = require('./rules.js')
+const { weapons, stances, stanceCatalog, skill, weaponSkills, weaponSkill, momentum, upgradeChoices, upgradePreview, ownedUpgrades, upgradeOdds } = require('./rules.js')
 const { drawUpgradeIcon } = require('./upgrade-art.js')
 const report = require('./report.js')
 const { attributePanels, nameControls, growthCardRects } = require('./layout.js')
@@ -78,7 +78,9 @@ function drawAttributes(c, panels, state, feedback, now) {
     const weapon = weapons.find(item => item.id === (side === 'player' ? state.weapon : actor.weapon))
     text(c, weapon.name, rect.x + rect.w - 10, rect.y + 16, 10, colors.muted, 'right')
     if (state.status !== 'prepare' && actor.combat && actor.combat.ward) {
-      text(c, '护身', rect.x + rect.w - 47, rect.y + 16, 9, '#b4dfe8', 'right')
+      text(c, state.combatVersion >= 11 ? '格挡' : '护身', rect.x + rect.w - 47, rect.y + 16, 9, '#b4dfe8', 'right')
+    } else if (state.status !== 'prepare' && actor.combat && (actor.combat.reflect || actor.combat.guaranteedCritical)) {
+      text(c, actor.combat.reflect ? '反击' : '必暴', rect.x + rect.w - 47, rect.y + 16, 9, '#ffda92', 'right')
     }
     const compact = rect.h <= 110
     const tight = rect.h < 94
@@ -107,9 +109,9 @@ function actionButton(c, rect, label, primary = true, challenge = false) {
 function logText(event) {
   const time = `${(event.time / 1000).toFixed(1)}s`
   const actor = event.side === 'player' ? '我方' : '敌方'
-  const ability = event.skill ? skill(event.skill).short : '出招'
+  const ability = event.skill ? skill(event.skill).short : event.followup ? '追击' : '出招'
   const outcome = event.dodged ? '被闪避' : `${event.critical ? '暴' : ''}${event.damage}伤${event.counter ? '·克' : event.guarded ? '·挡' : ''}`
-  return `${time} ${actor}·${ability} ${outcome}${event.healed ? ` 回${event.healed}` : ''}`
+  return `${time} ${actor}·${ability} ${outcome}${event.reflected ? ` 受反${event.reflected}` : ''}${event.healed ? ` 回${event.healed}` : ''}`
 }
 function drawArena(c, view, state, feedback, now, art) {
   const { arena, width } = view
@@ -201,13 +203,12 @@ function drawLog(c, view, state, { logOffset = 0, reviewing = false }) {
     if (prepare) {
       const trigger = state.combatVersion >= 5 ? '武势满100自动触发' : '每3次出招自动触发'
       text(c, `${selectedSkill.name} · ${trigger}`, r.x + 12, r.y + 12, 12, colors.gold, 'left', true)
-      text(c, selectedSkill.description, r.x + 12, r.y + 30, 12, colors.ink)
+      text(c, selectedSkill.description, r.x + 12, r.y + 30, Math.min(12, (r.w - 24) / selectedSkill.description.length), colors.ink)
       const stanceDescription = stanceCatalog(state.combatVersion, state.progression ? state.progression.version : 1).find(item => item.id === state.stance).description
       text(c, stanceDescription, r.x + 12, r.y + 48, Math.min(11, (r.w - 24) / stanceDescription.length), colors.muted)
       if (tactical && r.h >= 80) {
-        const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
         const enemyWeapon = weapons.find(item => item.id === state.enemy.weapon).name
-        text(c, `对手持${enemyWeapon} · ${match.name}`, r.x + 12, r.y + 68, 12, match.disadvantaged ? colors.red : colors.blue)
+        text(c, `对手持${enemyWeapon}`, r.x + 12, r.y + 68, 12, colors.blue)
       }
     } else {
       const end = Math.max(0, state.logs.length - logOffset)
@@ -228,7 +229,6 @@ function drawLog(c, view, state, { logOffset = 0, reviewing = false }) {
 }
 function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffset = 0, reviewing = false, art, upgradeArt, selectedUpgrade, pendingChoice }) {
   const { width, height, top, arena } = view
-  const tactical = state.combatVersion >= 2
   c.clearRect(0, 0, width, height)
   c.fillStyle = gradient(c, 0, 0, width, height, ['#18283d', '#0e1725']); c.fillRect(0, 0, width, height)
   headerButton(c, view.home, '‹ 游戏合集', header)
@@ -257,7 +257,7 @@ function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffse
   text(c, prepare && state.round === 1 ? '武器 · 首战可选择' : '武器 · 本轮已锁定', arena.x, view.weapons[0].y - 12, 12, colors.muted)
   drawTactics(c, view, state)
   weapons.forEach((weapon, i) => control(c, view.weapons[i], weapon.name,
-    `${weaponSkill(weapon.id).short} · ${tactical && counters(weapon.id, state.enemy.weapon) ? '克制' : '自动'}`,
+    `${weaponSkill(weapon.id, state.combatVersion).short} · 自动`,
     state.weapon === weapon.id, prepare && state.round === 1))
   text(c, '战斗姿态 · 每战可调整', arena.x, view.stances[0].y - 12, 12, colors.muted)
   stances.forEach((stance, i) => control(c, view.stances[i], stance.name, stance.note, state.stance === stance.id, prepare))
@@ -270,7 +270,7 @@ function draw(c, view, state, { modal, best, feedback, now, saveFailed, logOffse
 function drawModal(c, view, state, modal, best, upgradeArt, selectedUpgrade, pendingChoice) {
   c.fillStyle = 'rgba(5,12,22,.78)'; c.fillRect(0, 0, view.width, view.height)
   if (modal === 'growth') { drawGrowth(c, view, state, upgradeArt, selectedUpgrade, pendingChoice); return }
-  const guide = ['help', 'weapons', 'relations', 'momentum'].includes(modal)
+  const guide = ['help', 'weapons', 'momentum'].includes(modal)
   const r = guide ? view.guideDialog : view.dialog; const x = r.x + r.w / 2
   box(c, r, '#1c2d43', 16, '#8b846a')
   const result = modal === 'result'; const won = state.status === 'won'
@@ -292,15 +292,14 @@ function drawModal(c, view, state, modal, best, upgradeArt, selectedUpgrade, pen
     const panels = attributePanels({ x: r.x + 14, y: r.y + 90, w: r.w - 28, h: 162 })
     if (result) {
       drawReport(c, panels, state)
-      const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
       const own = weapons.find(item => item.id === state.weapon).name
       const enemy = weapons.find(item => item.id === state.enemy.weapon).name
-      text(c, `${own} ${match.symbol} ${enemy} · ${match.name}`, x, r.y + 268, 12, match.disadvantaged ? colors.red : colors.gold, 'center')
+      text(c, `${own} 对战 ${enemy}`, x, r.y + 268, 12, colors.gold, 'center')
       text(c, state.report && !state.report.complete ? '旧存档：仅统计保留的战报' : won ? state.round < 100 ? '下一战前选择强化 · 满血迎战' : '百战完成 · 连胜纪录已保存' : '换人再战将重置本轮强化', x, r.y + 289, 11, colors.muted, 'center')
     } else {
       drawAttributes(c, panels, state)
       text(c, '自动交战 · 技能随武器自动触发', x, r.y + 268, 12, colors.muted, 'center')
-      text(c, '玩法中可查看武器技能与克制图谱', x, r.y + 289, 11, colors.muted, 'center')
+      text(c, '玩法中可查看武器技能与武势机制', x, r.y + 289, 11, colors.muted, 'center')
     }
   }
   actionButton(c, guide ? view.guideSecondary : view.modalSecondary, result ? '查看战报' : modal === 'reset' ? '取消' : '关闭', false)
@@ -348,7 +347,7 @@ function drawGrowth(c, view, state, upgradeArt, selectedUpgrade, pendingChoice) 
     text(c, item.qualityName, card.x + card.w - 12, card.y + 20, 12, item.color, 'right', true)
     text(c, `${format(before)} → ${format(after)}`, card.x + 56, card.y + 43, 13, colors.ink)
     text(c, bonus, card.x + 14, card.y + 62, 11, colors.muted)
-    const capped = actualGain < item.amount - .0001 && state.progression.version >= 5 || (percent && after - before < item.amount - .0001) || (item.id === 'spd' && after === 4)
+    const capped = state.progression.version < 6 && (actualGain < item.amount - .0001 && state.progression.version >= 5 || (percent && after - before < item.amount - .0001) || (item.id === 'spd' && after === 4))
     text(c, pendingChoice === item.id ? '已选中 ✓' : capped ? '已到属性上限' : '选择 ›', card.x + card.w - 12, card.y + 62, 11, item.color, 'right')
   })
   const owned = ownedUpgrades(state.progression)
@@ -375,8 +374,8 @@ function drawGrowth(c, view, state, upgradeArt, selectedUpgrade, pendingChoice) 
 }
 function drawGuide(c, view, state, modal) {
   const r = view.guideDialog; const x = r.x + r.w / 2
-  const tabs = ['help', 'weapons', 'relations', 'momentum']
-  ;['基础玩法', '武器技能', '克制图谱', '武势机制'].forEach((label, i) => {
+  const tabs = ['help', 'weapons', 'momentum']
+  ;['基础玩法', '武器技能', '武势机制'].forEach((label, i) => {
     const rect = view.guideTabs[i]; const selected = tabs[i] === modal
     box(c, rect, selected ? '#354758' : '#142337', 7, selected ? colors.gold : colors.line)
     text(c, label, rect.x + rect.w / 2, rect.y + 15, 12, selected ? colors.gold : colors.ink, 'center', true)
@@ -384,13 +383,15 @@ function drawGuide(c, view, state, modal) {
   if (modal === 'weapons') {
     text(c, '武势满100施技，释放后可再次蓄满', x, r.y + 104, 12, colors.ink, 'center')
     weaponSkills.forEach((item, i) => {
+      item = weaponSkill(item.weapon, state.combatVersion)
       const selected = item.weapon === state.weapon
       const rect = { x: r.x + 12, y: r.y + 123 + i * 43, w: r.w - 24, h: 39 }
       box(c, rect, selected ? '#2b4053' : '#142337', 7, selected ? colors.gold : colors.line)
       text(c, `${weapons[i].name} · ${item.name}${selected ? ' · 当前' : ''}`, rect.x + 10, rect.y + 11, 13, selected ? colors.gold : colors.ink, 'left', true)
-      text(c, weaponSkill(item.weapon, state.combatVersion).description, rect.x + 10, rect.y + 28, 12, colors.muted)
+      const description = item.description
+      text(c, description, rect.x + 10, rect.y + 28, Math.min(12, (rect.w - 20) / description.length), colors.muted)
     })
-    text(c, state.combatVersion >= 8 ? '技能只作用于本次 · 护身留至下次受击' : state.combatVersion === 7 ?
+    text(c, state.combatVersion >= 11 ? '反击与格挡不叠加 · 闪避不消耗' : state.combatVersion >= 8 ? '技能只作用于本次 · 护身留至下次受击' : state.combatVersion === 7 ?
       '穿甲降低有效防御 · 护身使伤害减少25%' : '伤害与受击蓄势 · 暴击+6 · 闪避+8', x, r.y + 398, 11, colors.muted, 'center')
   } else if (modal === 'momentum') {
     text(c, '武势上限100，双方使用同一规则', x, r.y + 104, 12, colors.ink, 'center')
@@ -408,39 +409,16 @@ function drawGuide(c, view, state, modal) {
     })
     text(c, '满值后下次出招释放，清空后重新积攒', x, r.y + 366, 12, colors.gold, 'center')
     text(c, '技能也可蓄势 · 每战清零 · 暂停保留', x, r.y + 395, 11, colors.muted, 'center')
-  } else if (modal === 'relations') {
-    const bonus = Math.round((relation('sword', 'dual', state.combatVersion, state.progression ? state.progression.version : 1).scale - 1) * 100)
-    const boosted = state.combatVersion >= 7 ? '攻击' : '伤害'
-    text(c, `→ 专属克制：${boosted} +${bonus}%`, r.x + 14, r.y + 104, 12, colors.gold)
-    text(c, `← 被克制：敌方${boosted} +${bonus}%`, r.x + 14, r.y + 125, 12, colors.red)
-    text(c, '= 势均力敌：双方无克制加成', r.x + 14, r.y + 146, 12, colors.blue)
-    const left = r.x + 12; const labelW = 48; const cellW = (r.w - 24 - labelW) / 6
-    text(c, '我 / 敌', left + labelW / 2, r.y + 171, 10, colors.muted, 'center')
-    weapons.forEach((weapon, i) => text(c, weapon.name, left + labelW + cellW * (i + .5), r.y + 171,
-      Math.min(12, Math.floor((cellW - 4) / 3)), weapon.id === state.enemy.weapon ? colors.gold : colors.ink, 'center'))
-    weapons.forEach((weapon, row) => {
-      const y = r.y + 188 + row * 31
-      box(c, { x: left, y, w: r.w - 24, h: 27 }, weapon.id === state.weapon ? '#2b4053' : '#142337', 4)
-      text(c, weapon.name, left + labelW / 2, y + 13, 12, weapon.id === state.weapon ? colors.gold : colors.ink, 'center')
-      weapons.forEach((enemy, col) => {
-        const match = relation(weapon.id, enemy.id, state.combatVersion, state.progression ? state.progression.version : 1)
-        const cellX = left + labelW + cellW * col
-        if (weapon.id === state.weapon && enemy.id === state.enemy.weapon) box(c, { x: cellX + 3, y: y + 2, w: cellW - 6, h: 23 }, null, 4, colors.gold)
-        text(c, match.symbol, cellX + cellW / 2, y + 13, 17, match.counter ? colors.gold : match.disadvantaged ? colors.red : colors.blue, 'center', true)
-      })
-    })
-    text(c, '每种武器克一种、被一种克制', x, r.y + 391, 12, colors.muted, 'center')
   } else {
     const lines = state.combatVersion >= 7 ? [
       '① 先判闪避；暴击将攻击提高至1.8倍。',
       state.combatVersion >= 8 ? '② 命中伤害＝攻击－防御，最低1。' : '② 命中伤害＝攻击－有效防御，最低1。',
       '③ 武势满100自动施技；胜战选择强化。',
-      state.combatVersion >= 10 ? '④ 四战对初始属性；第五战对成长属性。' : '④ 首战选武器，每战可调整战斗姿态。'
+      state.combatVersion >= 10 ? '④ 每五战遇强敌，之后四战参照该强敌。' : '④ 首战选武器，每战可调整战斗姿态。'
     ] : ['① 首战选武器，每战可调整战斗姿态。', '② 武势满100自动释放武器技能。', '③ 胜利后三选一强化，仅本轮生效。', '④ 对手逐步变强，每五战迎接强敌。']
     lines.forEach((value, i) => text(c, value, r.x + 14, r.y + 108 + i * 24, 12, colors.ink))
     drawAttributes(c, attributePanels({ x: r.x + 12, y: r.y + 202, w: r.w - 24, h: 146 }), state)
-    const match = relation(state.weapon, state.enemy.weapon, state.combatVersion, state.progression ? state.progression.version : 1)
-    text(c, `${match.symbol} 当前对局：${match.name}`, x, r.y + 369, 12, match.disadvantaged ? colors.red : colors.gold, 'center')
+    text(c, '六种武器各有属性与技能', x, r.y + 369, 12, colors.gold, 'center')
     text(c, state.status === 'prepare' ? '敌方数值在开战后揭示' : '阅读指南期间，战斗暂停', x, r.y + 394, 12, colors.muted, 'center')
   }
   if (state.combatVersion < 5) {
@@ -452,6 +430,12 @@ function drawGuide(c, view, state, modal) {
     text(c, '当前沿用原属性；下一战更新初始速率', x, r.y + 15, 10, colors.muted, 'center')
   } else if (state.combatVersion === 9) {
     text(c, '当前沿用原成长；下一战启用五战循环', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion === 10) {
+    text(c, '当前沿用原武器技能；下一战更新', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion === 11) {
+    text(c, '当前保留原攻速；下一战调整大斧攻速', x, r.y + 15, 10, colors.muted, 'center')
+  } else if (state.combatVersion >= 12 && state.combatVersion < 18) {
+    text(c, '当前沿用旧对局规则；下一战更新', x, r.y + 15, 10, colors.muted, 'center')
   }
 }
 module.exports = { draw, drawCombatFrame, drawCover }

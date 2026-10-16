@@ -12,7 +12,7 @@ function drawDetail(c, screen) {
   const cover = { x: 22, y: top + 128, w: width - 44, h: Math.min(300, (height - top - bottom) * .36) }
   drawCover(c, cover)
   const infoY = cover.y + cover.h + 29
-  const lines = ['上下左右滑动，调整投掷方向。', '按住圆点蓄力，松手投出纸团。', '纸团会堆叠，投偏太多同事会清理。']
+  const lines = ['上下左右滑动，按住圆点蓄力投掷。', '每投进 5 球，纸团落稳后纸篓换位。', '纸团会堆叠，投偏太多同事会清理。']
   lines.forEach((line, index) => text(c, line, 24, infoY + index * 25, Math.min(13, (width - 48) / 22), '#171717'))
   let saved
   try { saved = restore(wx.getStorageSync(SAVE_KEY)) } catch (error) {}

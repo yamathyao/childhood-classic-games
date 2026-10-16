@@ -1,0 +1,162 @@
+{
+  "model": "gpt-image-2.5-sunburst",
+  "method": "image generation; magenta keying; inspected wheel registration; mirrored panorama; offline compression",
+  "prompts": [
+    "art-source/bicycle-rider.prompt.txt",
+    "art-source/bicycle-landscape.prompt.txt",
+    "art-source/bicycle-props.prompt.txt",
+    "art-source/bicycle-earth.prompt.txt"
+  ],
+  "style": "restrained alpine adventure; muted natural palette; adult rider with opaque full-face helmet",
+  "riderRegistration": {
+    "sourceSize": [
+      1024,
+      1024
+    ],
+    "wheelHubs": [
+      [
+        213.704,
+        717.488
+      ],
+      [
+        814.725,
+        717.488
+      ]
+    ],
+    "wheelRadius": 186,
+    "sourceLevelRotation": 0.47665938175312106,
+    "riderScale": 0.78,
+    "localWheelHubs": [
+      [
+        -23.4,
+        6.24
+      ],
+      [
+        23.4,
+        6.24
+      ]
+    ],
+    "sourceOrigin": [
+      514.2145,
+      637.352
+    ]
+  },
+  "props": "4x4 atlas, 128px cells; tree, rock, log, flowers, tent, gear, fire, sign, van, car, engine, carriage, barrier, crossing, ramp, flags",
+  "atlasBounds": [
+    [
+      36,
+      4,
+      56,
+      120
+    ],
+    [
+      132,
+      68,
+      120,
+      56
+    ],
+    [
+      260,
+      78,
+      120,
+      46
+    ],
+    [
+      388,
+      75,
+      120,
+      49
+    ],
+    [
+      4,
+      180,
+      120,
+      72
+    ],
+    [
+      132,
+      184,
+      120,
+      68
+    ],
+    [
+      260,
+      155,
+      120,
+      97
+    ],
+    [
+      402,
+      132,
+      92,
+      120
+    ],
+    [
+      4,
+      313,
+      120,
+      67
+    ],
+    [
+      132,
+      323,
+      120,
+      57
+    ],
+    [
+      260,
+      331,
+      120,
+      49
+    ],
+    [
+      388,
+      339,
+      120,
+      41
+    ],
+    [
+      4,
+      446,
+      120,
+      62
+    ],
+    [
+      162,
+      388,
+      60,
+      120
+    ],
+    [
+      260,
+      445,
+      120,
+      63
+    ],
+    [
+      388,
+      434,
+      120,
+      74
+    ]
+  ],
+  "files": {
+    "rider.png": {
+      "bytes": 238121,
+      "sha256": "6ee1769abb9a0426c818e26d107412ebaa9db677dc0ce419ee5396accc1fde80"
+    },
+    "props.png": {
+      "bytes": 194611,
+      "sha256": "172a3bd277ff14b15f185d544bbb2e5dfc78c8f5ae20bb62580645302ee811d4"
+    },
+    "panorama.jpg": {
+      "bytes": 83279,
+      "sha256": "12849180dfdde5d148d28a9dd10bc1c5134d47b1c21b03f3cf48c37812e995f9"
+    },
+    "earth.jpg": {
+      "bytes": 7120,
+      "sha256": "65a3520d526365f29863d39b6dbd23c5216521e345299471f739e261302990d8"
+    }
+  },
+  "decodedBytes": 5505024
+}

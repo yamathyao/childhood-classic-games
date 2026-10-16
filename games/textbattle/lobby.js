@@ -7,7 +7,7 @@ function drawDetail(c, screen, art) {
   const back = { x: 18, y: top + 5, w: 105, h: 32 }
   text(c, '‹  游戏合集', 22, top + 21, 13, P.muted)
   text(c, '文字对战', 24, top + 70, 31, P.ink, 'left', true)
-  text(c, '武器克制 · 自动轻技能 · 连胜挑战', 26, top + 101, 12, P.muted)
+  text(c, '六种武器 · 自动轻技能 · 连胜挑战', 26, top + 101, 12, P.muted)
   const cover = { x: 20, y: top + 124, w: width - 40, h: Math.min(260, (height - top - bottom) * .34) }
   drawCover(c, cover, art)
   const enter = { x: 24, y: height - bottom - 68, w: width - 48, h: 44 }

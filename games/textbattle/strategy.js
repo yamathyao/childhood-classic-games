@@ -19,7 +19,21 @@ const currentWeaponSkills = weaponSkills.map(item => ({ ...item, description: it
 const simpleWeaponSkills = currentWeaponSkills.map(item => ({ ...item,
   description: item.weapon === 'spear' ? '本次不减对方防御。' : item.weapon === 'axe' ? '本次不减防御，攻击+20%。' :
     item.weapon === 'sword' ? '本次必中，攻击+15%。' : '本次' + item.description }))
-const skills = [...legacySkills, ...simpleWeaponSkills]
+const revisedWeaponSkills = [
+  { id: 'sword-counter', weapon: 'sword', name: '反击', short: '反击', note: '受击反伤', description: '下次受击生还反伤80%，至多自身攻击。' },
+  simpleWeaponSkills.find(item => item.weapon === 'saber'),
+  { id: 'spear-thrust', weapon: 'spear', name: '贯甲', short: '贯甲', note: '贯甲增伤', description: '本次无视防御，攻击+15%。' },
+  { id: 'dual-flurry', weapon: 'dual', name: '双袭', short: '双袭', note: '连续出招', description: '连续攻击两次，各自判定闪避与暴击。' },
+  { id: 'axe-critical', weapon: 'axe', name: '蓄威', short: '蓄威', note: '蓄力必暴', description: '下一次出招必定暴击，仍可被闪避。' },
+  { id: 'halberd-block', weapon: 'halberd', name: '格挡', short: '格挡', note: '抵挡来袭', description: '完全格挡下一次命中的攻击。' }
+]
+const balancedWeaponSkills = revisedWeaponSkills.map(item => item.weapon === 'spear' ?
+  { ...item, description: '本次无视防御，攻击+35%。' } : item)
+const tunedWeaponSkills = balancedWeaponSkills.map(item => item.weapon === 'spear' ?
+  { ...item, description: '本次无视防御，攻击+30%。' } : item)
+const guardedWeaponSkills = tunedWeaponSkills.map(item => item.weapon === 'halberd' ?
+  { ...item, description: '下一次命中受击减伤80%。' } : item)
+const skills = [...legacySkills, ...simpleWeaponSkills, ...guardedWeaponSkills.filter(item => !simpleWeaponSkills.some(old => old.id === item.id))]
 // Old active battles retain these modifiers until the next round.
 const legacyTraits = {
   duelist: { name: '刀势', note: '第三次出招伤害 +25%', counters: ['sword', 'dual'] },
@@ -28,16 +42,16 @@ const legacyTraits = {
   brute: { name: '蓄力', note: '第三次出招伤害 +35%', counters: ['saber'] }
 }
 const skill = id => skills.find(item => item.id === id)
-const weaponSkill = (weapon, combatVersion = 8) => (combatVersion >= 8 ? simpleWeaponSkills : combatVersion === 7 ? currentWeaponSkills : weaponSkills).find(item => item.weapon === weapon)
+const weaponSkill = (weapon, combatVersion = 18) => (combatVersion >= 18 ? guardedWeaponSkills : combatVersion >= 17 ? tunedWeaponSkills : combatVersion >= 14 ? balancedWeaponSkills : combatVersion >= 11 ? revisedWeaponSkills : combatVersion >= 8 ? simpleWeaponSkills : combatVersion === 7 ? currentWeaponSkills : weaponSkills).find(item => item.weapon === weapon)
 // Hundredths of a point keep saves and split-time combat exactly reproducible.
 const momentum = { max: 10000, dealt: 160, taken: 110, critical: 600, dodge: 800 }
 const counterTargets = { sword: 'dual', dual: 'axe', axe: 'halberd', halberd: 'spear', spear: 'saber', saber: 'sword' }
 const legacyCounters = (weapon, kind) => !!legacyTraits[kind] && legacyTraits[kind].counters.includes(weapon)
-const counters = (weapon, target) => !!counterTargets[weapon] && counterTargets[weapon] === target
-function relation(weapon, target, combatVersion = 6, growthVersion = 2) {
+const counters = (weapon, target, combatVersion = 13) => combatVersion < 13 && !!counterTargets[weapon] && counterTargets[weapon] === target
+function relation(weapon, target, combatVersion = 13, growthVersion = 2) {
   const scale = combatVersion >= 6 || (combatVersion === 5 && growthVersion >= 2) ? 1.1 : 1.18
-  if (counters(weapon, target)) return { name: '专属克制', symbol: '→', scale, counter: true, disadvantaged: false }
-  if (counters(target, weapon)) return { name: '被克制', symbol: '←', scale: 1, counter: false, disadvantaged: true }
+  if (counters(weapon, target, combatVersion)) return { name: '专属克制', symbol: '→', scale, counter: true, disadvantaged: false }
+  if (counters(target, weapon, combatVersion)) return { name: '被克制', symbol: '←', scale: 1, counter: false, disadvantaged: true }
   return { name: '势均力敌', symbol: '=', scale: 1, counter: false, disadvantaged: false }
 }
 const freshCombat = () => ({ attacks: 0, hitsTaken: 0, ward: false })
@@ -60,7 +74,7 @@ function legacyModifiers(state, side) {
       if (state.weapon === 'spear') result.dodge *= .45
     }
     if (attacker.combat.attacks % 3 === 0) {
-      result.skill = state.combatVersion === 2 ? state.skill : weaponSkill(state.weapon).id
+      result.skill = state.combatVersion === 2 ? state.skill : weaponSkill(state.weapon, state.combatVersion).id
       if (result.skill === 'pierce') { result.pierce = 1; result.scale *= 1.4 }
       else if (result.skill === 'focus') { result.dodge = 0; result.scale *= 1.4 }
       else if (result.skill === 'sword-point') { result.dodge = 0; result.scale *= 1.15 }
@@ -84,7 +98,7 @@ function legacyModifiers(state, side) {
   }
   return result
 }
-function modifiers(state, side) {
+function modifiers(state, side, followup = false) {
   if (state.combatVersion < 4) return legacyModifiers(state, side)
   const attacker = state[side]; const defender = state[side === 'player' ? 'enemy' : 'player']
   const weapon = side === 'player' ? state.weapon : state.enemy.weapon
@@ -94,10 +108,15 @@ function modifiers(state, side) {
   const result = { scale: match.scale, pierce: attacker.stats.pierce, dodge: defender.stats.dodge,
     counter: match.counter, skill: null, trait: null, guarded: false }
   const ready = state.combatVersion >= 5 ? attacker.combat.momentum >= momentum.max : attacker.combat.attacks % 3 === 0
-  if (ready) {
+  if (ready && !followup) {
     if (state.combatVersion >= 5) attacker.combat.momentum = 0
-    result.skill = weaponSkill(weapon).id
-    if (weapon === 'sword') { result.dodge = 0; result.scale *= 1.15 }
+    result.skill = weaponSkill(weapon, state.combatVersion).id
+    if (state.combatVersion >= 11) {
+      if (weapon === 'spear') { result.ignoreDefense = true; result.scale *= state.combatVersion >= 17 ? 1.3 : state.combatVersion >= 14 ? 1.35 : 1.15 }
+      else if (weapon === 'saber') result.scale *= 1.45
+      else if (weapon === 'dual') result.doubleStrike = true
+    }
+    else if (weapon === 'sword') { result.dodge = 0; result.scale *= 1.15 }
     else if (weapon === 'saber') result.scale *= 1.45
     else if (weapon === 'spear') {
       if (state.combatVersion >= 8) result.ignoreDefense = true
@@ -111,9 +130,14 @@ function modifiers(state, side) {
     }
     else if (weapon === 'halberd') result.scale *= 1.2
   }
+  if (state.combatVersion >= 11 && !followup && attacker.combat.guaranteedCritical) {
+    result.guaranteedCritical = true; delete attacker.combat.guaranteedCritical
+  }
   if (defender.combat.ward) {
     if (state.combatVersion < 7) result.scale *= .75
     result.guarded = true
+    if (state.combatVersion >= 18) result.damageScale = .2
+    else if (state.combatVersion >= 11) result.blocked = true
   }
   return result
 }
@@ -129,6 +153,11 @@ function afterAttack(state, side, event) {
     player.hp += healed; player.combat.ward = true; event.healed = healed
   }
   if (event.skill === 'halberd-ward' && (state.combatVersion >= 4 || side === 'player')) state[side].combat.ward = true
+  if (state.combatVersion >= 11) {
+    if (event.skill === 'sword-counter') state[side].combat.reflect = true
+    if (event.skill === 'axe-critical') state[side].combat.guaranteedCritical = true
+    if (event.skill === 'halberd-block') state[side].combat.ward = true
+  }
   if (state.combatVersion >= 5) {
     const attacker = state[side]
     const gain = (actor, amount) => { actor.combat.momentum = Math.min(momentum.max, actor.combat.momentum + amount) }
@@ -142,16 +171,22 @@ function afterAttack(state, side, event) {
 function validCombat(value, combatVersion) {
   return value && Number.isInteger(value.attacks) && value.attacks >= 0 && value.attacks <= 20000 &&
     Number.isInteger(value.hitsTaken) && value.hitsTaken >= 0 && value.hitsTaken <= 20000 && typeof value.ward === 'boolean' &&
-    (combatVersion < 5 || (Number.isInteger(value.momentum) && value.momentum >= 0 && value.momentum <= momentum.max))
+    (combatVersion < 5 || (Number.isInteger(value.momentum) && value.momentum >= 0 && value.momentum <= momentum.max)) &&
+    ['reflect', 'guaranteedCritical'].every(key => value[key] === undefined || (combatVersion >= 11 && value[key] === true))
 }
 function validEvent(event, state) {
   const actorWeapon = event.side === 'player' ? state.weapon : state.enemy.weapon
-  const allowedSkill = state.combatVersion >= 3 ? event.skill === weaponSkill(actorWeapon).id : legacySkills.some(item => item.id === event.skill)
+  const target = event.side === 'player' ? 'enemy' : 'player'
+  const targetWeapon = target === 'player' ? state.weapon : state.enemy.weapon
+  const allowedSkill = state.combatVersion >= 3 ? event.skill === weaponSkill(actorWeapon, state.combatVersion).id : legacySkills.some(item => item.id === event.skill)
   return (event.skill === undefined || (allowedSkill && (state.combatVersion >= 4 || event.side === 'player'))) &&
     (event.trait === undefined || (state.combatVersion < 4 && event.side === 'enemy' && event.trait === state.enemy.kind && !!legacyTraits[event.trait])) &&
-    (event.counter === undefined || typeof event.counter === 'boolean') &&
+    (event.counter === undefined || (typeof event.counter === 'boolean' && (state.combatVersion < 13 || !event.counter))) &&
     (event.guarded === undefined || typeof event.guarded === 'boolean') &&
+    (event.followup === undefined || (state.combatVersion >= 11 && event.followup === true && actorWeapon === 'dual' && event.skill === undefined)) &&
+    (event.reflected === undefined || (state.combatVersion >= 11 && targetWeapon === 'sword' && !event.dodged &&
+      Number.isInteger(event.reflected) && event.reflected > 0 && event.reflected <= Math.min(state[event.side].stats.maxHp, state[target].stats.atk, Math.round(event.damage * .8)))) &&
     (event.healed === undefined || (event.skill === 'renew' && Number.isInteger(event.healed) && event.healed >= 0 &&
       event.healed <= Math.round(state.player.stats.maxHp * .03)))
 }
-module.exports = { skills, legacySkills, weaponSkills: simpleWeaponSkills, skill, weaponSkill, momentum, legacyTraits, counters, relation, freshCombat, resetCombat, modifiers, afterAttack, validCombat, validEvent }
+module.exports = { skills, legacySkills, weaponSkills: guardedWeaponSkills, skill, weaponSkill, momentum, legacyTraits, counters, relation, freshCombat, resetCombat, modifiers, afterAttack, validCombat, validEvent }

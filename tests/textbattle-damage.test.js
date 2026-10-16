@@ -28,7 +28,7 @@ test('frozen v8 battles resume exactly and convert only starting rates once on t
   assert.deepEqual(rules.restore(rules.snapshot(state)), state)
   const base = { ...state.player.base }; const rng = state.rng
   state.status = 'won'; state.enemy.hp = 0; state.streak = state.round
-  assert.ok(rules.nextRound(state)); assert.equal(state.combatVersion, 10)
+  assert.ok(rules.nextRound(state)); assert.equal(state.combatVersion, 18)
   assert.deepEqual(state.player.base, { ...base,
     crit: Math.max(5, Math.min(8, 5 + (base.crit - 3) / .8 * .1)),
     dodge: Math.max(5, Math.min(7, 5 + (base.dodge - 2) / .6 * .07)),
@@ -76,22 +76,24 @@ test('landed hits use two random draws and no damage variance; dodges use only o
     assert.equal(missed.rng, nextRandom(seed))
   }
 })
-test('counter and weapon skill boosts apply to attack; ward reduces the resulting damage', () => {
+test('weapon matchups add no attack bonus; saber boosts and block still work', () => {
   const counter = duel('saber', 'sword')
-  assert.equal(strike(counter).damage, 13)
+  assert.equal(strike(counter).damage, 10)
   const skill = duel('saber', 'sword'); skill.player.combat.momentum = rules.momentum.max
-  assert.equal(strike(skill).damage, Math.round(30 * 1.1 * 1.45 - 20))
+  assert.equal(strike(skill).damage, Math.round(30 * 1.45 - 20))
   const ward = duel(); ward.enemy.combat.ward = true
-  assert.equal(strike(ward).damage, Math.round(10 * .75))
+  assert.equal(strike(ward).damage, 2)
   assert.equal(ward.enemy.combat.ward, false)
 })
-test('charged skills combine guaranteed hit, critical attack and armor bypass as advertised', () => {
+test('legacy charged skills combine guaranteed hit, critical attack and armor bypass as advertised', () => {
   const sword = duel(); sword.enemy.stats.dodge = 100; sword.player.stats.crit = 100
+  sword.combatVersion = 10
   sword.player.combat.momentum = rules.momentum.max
   const event = strike(sword)
   assert.equal(event.dodged, false); assert.equal(event.critical, true)
   assert.equal(event.damage, Math.round(30 * 1.8 * 1.15 - 20))
   const axe = duel('axe'); axe.player.stats.crit = 100; axe.enemy.stats.def = 100
+  axe.combatVersion = 10
   axe.player.combat.momentum = rules.momentum.max
   assert.equal(strike(axe).damage, Math.round(30 * 1.8 * 1.2))
 })
@@ -112,7 +114,7 @@ test('frozen v6 battle resumes exactly before migrating its acquired rewards to 
   assert.deepEqual(rules.restore(rules.snapshot(state)), state)
   state.status = 'won'; state.enemy.hp = 0; state.streak = state.round
   assert.equal(rules.nextRound(state), true)
-  assert.equal(state.combatVersion, 10); assert.equal(state.progression.version, 5)
+  assert.equal(state.combatVersion, 18); assert.equal(state.progression.version, 6)
   assert.deepEqual(state.progression.counts, fixture.progression.counts)
   assert.deepEqual(state.progression.qualities, fixture.progression.qualities)
   assert.ok(rules.restore(rules.snapshot(state)))
@@ -153,11 +155,12 @@ test('weapon skill descriptions match the damage rules of current and legacy bat
   assert.equal(rules.weaponSkill('spear', 8).description, '本次不减对方防御。')
   assert.ok(rules.weaponSkill('spear', 7).description.includes('闪避判定减半'))
 })
-test('every weapon skill affects a single attack, leaves defense intact and can charge again', () => {
+test('legacy weapon skills affect a single attack, leave defense intact and can charge again', () => {
   for (const weapon of rules.weapons) {
     const state = duel(weapon.id); state.player.combat.momentum = rules.momentum.max
+    state.combatVersion = 10
     const special = strike(state)
-    assert.equal(special.skill, rules.weaponSkill(weapon.id).id)
+    assert.equal(special.skill, rules.weaponSkill(weapon.id, 10).id)
     assert.equal(state.enemy.stats.def, 20)
     assert.ok(state.player.combat.momentum < rules.momentum.max)
     state.player.cooldown = 0
@@ -178,7 +181,7 @@ test('frozen v7 spear combat keeps passive pierce, skill precision and RNG until
   assert.ok(rules.restore(rules.snapshot(state)))
   state.status = 'won'; state.enemy.hp = 0; state.streak = state.round
   assert.ok(rules.nextRound(state))
-  assert.equal(state.combatVersion, 10)
+  assert.equal(state.combatVersion, 18)
   assert.equal(state.player.stats.pierce, 0); assert.equal(state.enemy.stats.pierce, 0)
   assert.deepEqual(state.progression.counts, source.progression.counts)
   assert.deepEqual(state.progression.qualities, source.progression.qualities)

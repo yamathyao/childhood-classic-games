@@ -47,7 +47,37 @@ function verify(samples = 100) {
   return totals
 }
 
-if (require.main === module) {
-  console.log(JSON.stringify({ battles: 10800, momentum: rules.momentum, results: verify() }, null, 2))
+// Both sides use strong stance. Average each ordered matchup with the reversed
+// seating so simultaneous-attack priority does not favor a weapon's row.
+function matchups(samples = 1000) {
+  assert.ok(Number.isInteger(samples) && samples > 0)
+  const wins = rules.weapons.map(() => rules.weapons.map(() => 0))
+  for (let row = 0; row < rules.weapons.length; row++) for (let col = 0; col < rules.weapons.length; col++) {
+    for (let seed = 1; seed <= samples; seed++) {
+      const { state } = battle(seed * 2654435761 >>> 0, rules.weapons[row].id, rules.weapons[col].id, 'strong')
+      wins[row][col] += state.status === 'won'
+    }
+  }
+  const percentages = wins.map(() => [])
+  for (let row = 0; row < rules.weapons.length; row++) for (let col = row; col < rules.weapons.length; col++) {
+    const tenths = Math.round((wins[row][col] + samples - wins[col][row]) / (2 * samples) * 1000)
+    percentages[row][col] = tenths / 10
+    percentages[col][row] = (1000 - tenths) / 10
+  }
+  return {
+    battles: rules.weapons.length ** 2 * samples, samples, stance: 'strong',
+    swappedSides: true, weapons: rules.weapons.map(item => item.name),
+    rows: rules.weapons.map((weapon, row) => {
+      const rates = wins[row].map((value, col) => (value + samples - wins[col][row]) / (2 * samples) * 100)
+      return { weapon: weapon.name, winPercents: percentages[row],
+        averageVsOthers: +(rates.reduce((sum, value, col) => sum + (col === row ? 0 : value), 0) /
+          (rules.weapons.length - 1)).toFixed(1) }
+    })
+  }
 }
-module.exports = { battle, verify }
+
+if (require.main === module) {
+  console.log(JSON.stringify(process.argv.includes('--matchups') ? matchups() :
+    { battles: 10800, momentum: rules.momentum, results: verify() }, null, 2))
+}
+module.exports = { battle, verify, matchups }

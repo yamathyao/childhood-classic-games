@@ -7,6 +7,7 @@ function copy(value) { return { ...value, player: { ...value.player }, enemy: { 
 function record(value, event, actualDamage = event.damage) {
   const attacking = value[event.side]; const defending = value[event.side === 'player' ? 'enemy' : 'player']
   attacking.attacks++; attacking.damage += actualDamage
+  if (event.reflected) defending.damage += event.reflected
   if (event.critical) attacking.criticals++
   if (event.skill) attacking.skills++
   if (event.dodged) defending.dodges++

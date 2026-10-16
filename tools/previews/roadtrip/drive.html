@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5f3eb">
+  <title>正在兜风 · 滴滴叭叭</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="driving-page">
+  <main class="driving-shell">
+    <header class="drive-header"><a id="back-to-setup" href="./">← 返回选择</a><span>滴滴叭叭 <small>ROAD TRIP</small></span><button id="help-open">怎么玩 ↗</button></header>
+        <section class="drive-panel" aria-label="公路驾驶游戏">
+          <div class="scene" id="scene">
+            <canvas id="road" aria-label="俯视角动态公路，使用方向键或下方按钮驾驶" tabindex="0"></canvas>
+            <div class="scene-top"><span class="route"><span>G01</span> 好天气公路 <i id="route-lanes">入口匝道</i></span><div class="scene-actions"><button id="sound" aria-label="开启声音" title="开启声音"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path id="sound-path" d="m16 9 6 6m0-6-6 6"/></svg></button><button id="pause" aria-label="暂停驾驶" title="暂停驾驶" disabled>Ⅱ</button><button id="reset" aria-label="重新开始" title="重新开始">↻</button></div></div>
+            <div class="route-warning" id="route-warning" role="status" aria-live="polite" hidden><span class="warning-symbol" aria-hidden="true">↖</span><div><strong id="warning-title"></strong><small id="warning-detail"></small></div><b id="warning-distance"></b></div>
+            <div class="camera-alert" id="camera-alert" role="status" aria-live="polite" hidden><span class="speed-limit">80<small>km/h</small></span><div><strong>前方超速抓拍</strong><span id="camera-distance"></span><small id="camera-hint">＞88扣100 / ＞96扣200</small></div></div>
+            <div class="score-feedback" id="score-feedback" role="status" aria-live="polite" hidden><strong id="score-delta"></strong><span id="score-reason"></span></div>
+            <div class="exit-tools"><span id="next-exit">每 1.6 km · 右侧结算出口</span><button id="exit-button" aria-pressed="false" hidden>驶出结算 ↗</button></div>
+            <div class="weather"><span class="sun">☀</span> 24°<span id="scenery-name">沿途 · 晴日街区</span></div>
+            <div class="road-status" id="road-status"><i></i><span>准备好，就出发。</span></div>
+            <div class="floating-message" id="message" role="status" aria-live="polite"></div>
+            <div class="scene-caption"><span class="caption-line"></span> THE GOOD KIND OF GOING NOWHERE.</div>
+            <button class="scene-launch" id="scene-start">出发，去兜风 <span>↗</span></button>
+            <div class="overlay" id="overlay" hidden><span id="overlay-kicker">TAKE A BREATH</span><h2 id="overlay-title">靠边歇一会儿。</h2><p id="overlay-copy">这条路会在这里等你。</p><section class="result-summary" id="result-summary" aria-label="本程积分结算" hidden><div class="result-total"><span>本程总分</span><strong id="result-score">0</strong><small>POINTS</small></div><dl><div><dt>里程奖励</dt><dd id="result-distance">+0</dd></div><div><dt>漂亮驾驶 <small id="result-skills">0 次</small></dt><dd id="result-skill">+0</dd></div><div><dt>超速抓拍 <small id="result-tickets">0 次</small></dt><dd id="result-penalty">−0</dd></div></dl></section><button id="overlay-action">继续兜风 →</button></div>
+          </div>
+          <div class="dashboard">
+            <div class="speed"><strong id="speed">00</strong><div><span>KM/H</span><span class="speed-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div></div>
+            <div class="dash-stat"><span>这一程</span><strong id="distance">0.00 <small>km</small></strong></div>
+            <div class="dash-stat score-stat"><span>本程积分</span><strong id="score">0 <small>分</small></strong></div>
+            <div class="dash-mode"><i></i><span id="dash-mode">自动巡航</span><small id="drive-state">等待出发</small></div>
+          </div>
+          <div class="touch-controls" aria-label="驾驶控制"><div class="steering"><button data-control="left" aria-label="向左">←</button><button data-control="right" aria-label="向右">→</button></div><button class="brake" data-control="brake">减速 <span>↓</span></button><button class="accelerator" data-control="accelerate">按住加速 <span>↑</span></button></div>
+        </section>
+  </main>
+  <dialog id="help"><button class="dialog-close" id="help-close" aria-label="关闭玩法">×</button><p class="eyebrow">A SMALL GUIDE TO THE OPEN ROAD</p><h2>想怎么开，就怎么开。</h2><p><strong>自动巡航</strong> · 车辆会自己前进、跟随前车减速。按 ← / → 或 A / D 换道；按住 ↑ 或 W 加速超车，松开后恢复跟车。</p><p><strong>手动驾驶</strong> · 按住 ← / → 或 A / D 连续转向，松手保持位置；按住 ↑ / W 加速，松手滑回 68 km/h。按住 ↓ / S 刹车。</p><p>空格或 P 暂停；手机使用画面下方的按钮。自动巡航换道时会避让并排的小车，手动模式需要自己留意车距。碰撞后可以再开一程。</p><p>从右侧匝道自动汇入；路面会出现弯道与车道收窄，提前 180 米提示并道。自动巡航会寻找空隙向左并道，手动驾驶请按提示调整方向。每行驶 1.6 km 出现右侧结算出口；出口前可点「驶出结算」或按 E。自动巡航辅助靠右，手动驾驶需先驶入最右车道；沿匝道驶出后结束游戏，错过出口可继续累积分数。</p><p><strong>积分规则</strong> · 每行驶 100 米 +10 分；从相邻车道干净利落地超车，漂亮穿梭 +20 分，每辆车只奖励一次。积分可以为负数；发生事故后，本程积分清零。</p><p><strong>超速抓拍</strong> · 前方 220 米提示抓拍，限速 80 km/h，经过抓拍线时，超速不超过 10% 不扣分；超过 10% 扣 100 分，超过 20% 扣 200 分，单次只扣最高一档。即车速超过 88 km/h 扣 100 分，超过 96 km/h 扣 200 分。自动巡航会提前减速；按住加速时请自己留意车速，及时松开油门或刹车。</p><p>小车只作风格化外观参考。返回选择页可更换车辆、驾驶模式与车流；再次出发会开启新行程。</p><button id="help-done">知道了，去兜风 →</button></dialog>
+  <script src="route.js"></script><script src="rules.js"></script><script src="scenery.js"></script><script src="art.js"></script><script src="renderer.js"></script><script src="settings.js"></script><script src="app.js"></script>
+</body>
+</html>

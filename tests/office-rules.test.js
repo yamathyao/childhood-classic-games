@@ -11,6 +11,104 @@ function body(id, values = {}) {
 }
 function fixture(balls) { return { ...rules.initialState(), balls, throws: balls.length, nextId: balls.length + 1 } }
 
+function stage(moves) {
+  return { ...rules.initialState(), binMoves: moves, nextBinAt: (moves + 1) * 5,
+    scored: moves * 5, throws: moves * 5, cleared: moves * 5, clearedScored: moves * 5, nextId: moves * 5 + 1 }
+}
+
+test('fifth real basket moves the bin once after all paper settles, carrying its contents without reaiming', () => {
+  const state = rules.initialState()
+  for (let shot = 0; shot < 4; shot++) { rules.launch(state, 1120); run(state, 4) }
+  assert.equal(state.scored, 4); assert.equal(state.binMoves, 0)
+  const loose = rules.launch(state, 0)
+  Object.assign(loose, { x: 0, z: 2, y: R, vx: 0, vy: 0, vz: 0, asleep: true, resolved: true })
+  const fifth = rules.launch(state, 1120)
+  for (let frame = 0; frame < 240 && !fifth.scored; frame++) rules.tick(state, 1000 / 60)
+  assert.equal(state.scored, 5); assert.equal(state.binMoves, 0)
+  assert.equal(rules.currentBin(state).x, BIN.x)
+  assert.equal(fifth.asleep, false, 'do not teleport an in-flight shot')
+  const pending = rules.restore(rules.snapshot(state))
+  assert.equal(pending.binMoves, 0); assert.equal(pending.nextBinAt, 5)
+  const aim = { yaw: pending.yaw, pitch: pending.pitch }
+  run(pending, 8)
+  assert.equal(pending.binMoves, 1); assert.equal(pending.nextBinAt, 10)
+  assert.notEqual(rules.currentBin(pending).x, BIN.x)
+  assert.equal(pending.scored, 5); assert.equal(pending.throws, 6); assert.equal(pending.balls.length, 6)
+  assert.equal(pending.yaw, aim.yaw); assert.equal(pending.pitch, aim.pitch)
+  assert.ok(pending.balls.filter(ball => ball.scored).every(ball => rules.inBinPile(ball, pending)))
+  assert.equal(pending.balls.find(ball => ball.id === loose.id).x, 0)
+  assert.equal(rules.moving(pending), false)
+  const saved = rules.snapshot(pending)
+  run(pending, 10)
+  assert.deepEqual(rules.snapshot(pending), saved, 'idle ticks cannot repeat a consumed milestone')
+  const resumed = rules.restore(saved)
+  assert.equal(resumed.binMoves, saved.binMoves); assert.equal(resumed.nextBinAt, saved.nextBinAt)
+  assert.deepEqual(resumed.balls.map(ball => [ball.id, ball.x, ball.y, ball.z, ball.scored]),
+    saved.balls.map(ball => [ball.id, ball.x, ball.y, ball.z, ball.scored]))
+})
+
+test('each five-basket milestone changes the target; every position is reachable and clear of solid furniture', () => {
+  let previous = null
+  for (let moves = 0; moves < 7; moves++) {
+    const state = stage(moves); const bin = rules.currentBin(state)
+    if (previous) assert.notDeepEqual(bin, previous)
+    previous = bin
+    assert.ok(bin.x - bin.radius > ROOM.left && bin.x + bin.radius < ROOM.right)
+    assert.ok(bin.z - bin.radius > ROOM.near && bin.z + bin.radius < ROOM.far)
+    for (const solid of SOLIDS.concat(rules.PROPS.map(prop => rules.propSolid(prop, state)))) {
+      if (solid.min[1] >= bin.height || solid.max[1] <= bin.bottom) continue
+      const x = Math.max(solid.min[0], Math.min(solid.max[0], bin.x))
+      const z = Math.max(solid.min[2], Math.min(solid.max[2], bin.z))
+      assert.ok(Math.hypot(bin.x - x, bin.z - z) > bin.radius + bin.wall, `${moves}/${solid.kind}`)
+    }
+    state.yaw = Math.atan2(bin.x - ORIGIN.x, bin.z - ORIGIN.z); state.pitch = .8
+    assert.ok(Math.abs(state.yaw) < .68)
+    const index = moves === 0 ? 0 : 1 + (moves - 1) % 3
+    const ball = rules.launch(state, [1020, 1010, 560, 790][index])
+    run(state, 4)
+    assert.equal(ball.scored, true, `real shot must reach position ${index}`)
+    assert.equal(ball.personHit, null); assert.equal(ball.propHit, null)
+    assert.equal(state.scored, moves * 5 + 1)
+    assert.equal(state.binMoves, moves)
+    // Four further credited shots reach the next milestone. Existing world
+    // paper is kept; the transition must not require a frame of active flight.
+    state.scored += 4; state.throws += 4; state.cleared += 4; state.clearedScored += 4; state.nextId += 4
+    assert.equal(rules.active(state), true)
+    run(state, 6)
+    assert.equal(state.binMoves, moves + 1); assert.equal(state.nextBinAt, (moves + 2) * 5)
+    assert.equal(rules.moving(state), false)
+    assert.ok(rules.inBinPile(ball, state))
+    assert.equal(rules.restore(rules.snapshot(state)).binMoves, moves + 1)
+  }
+})
+
+test('automatic cleanup protects the moved bin, manual cleanup resets relocation, old saves retain their target', () => {
+  const state = stage(1); const bin = rules.currentBin(state)
+  const kept = rules.launch(state, 0)
+  Object.assign(kept, { x: bin.x, z: bin.z, y: bin.bottom + R, vx: 0, vy: 0, vz: 0, asleep: true, resolved: true })
+  const loose = rules.launch(state, 0)
+  Object.assign(loose, { x: BIN.x, z: BIN.z, y: R, vx: 0, vy: 0, vz: 0, asleep: true, resolved: true })
+  assert.equal(rules.clearPaper(state, false), 1)
+  assert.equal(state.balls[0], kept); assert.equal(state.binMoves, 1); assert.equal(state.nextBinAt, 10)
+  const current = rules.snapshot(state)
+  assert.equal(rules.restore(current).binMoves, 1)
+  for (const change of [s => { delete s.binMoves }, s => { s.binMoves = -1 },
+    s => { s.binMoves = 2 }, s => { s.nextBinAt = 0 }, s => { s.nextBinAt = 11 }, s => { s.nextBinAt = 15 }]) {
+    const bad = structuredClone(current); change(bad)
+    assert.equal(rules.restore(bad).throws, 0)
+  }
+  const legacy = { ...current, version: 6 }
+  delete legacy.binMoves; delete legacy.nextBinAt
+  const restored = rules.restore(legacy)
+  assert.equal(restored.binMoves, 0); assert.equal(restored.nextBinAt, 10)
+  assert.deepEqual(restored.balls.map(ball => [ball.x, ball.y, ball.z]), state.balls.map(ball => [ball.x, ball.y, ball.z]))
+  assert.equal(restored.scored, 5)
+  const yaw = state.yaw
+  rules.clearPaper(state)
+  assert.equal(state.binMoves, 0); assert.equal(state.nextBinAt, 5)
+  assert.equal(state.scored, 0); assert.equal(state.yaw, yaw)
+})
+
 test('boss freezes other simultaneous impacts exactly at the eighth person hit', () => {
   const state = rules.initialState(); const person = rules.PEOPLE[0]
   state.throws = 7; state.cleared = 7; state.nextId = 8; state.totalPersonHits = 7
@@ -122,12 +220,30 @@ test('new paper collides with settled paper and wakes it; stable stacks stop sim
   assert.ok(arriving.vx < 3)
   run(state, 6); assert.equal(state.balls.length, 2); assert.equal(rules.moving(state), false)
   const pile = rules.initialState()
-  for (let shot = 0; shot < 18; shot++) { rules.launch(pile, 1120); run(pile, 3) }
+  for (let shot = 0; shot < 18; shot++) {
+    const bin = rules.currentBin(pile)
+    pile.yaw = Math.atan2(bin.x - ORIGIN.x, bin.z - ORIGIN.z); pile.pitch = .8
+    const index = pile.binMoves === 0 ? 0 : 1 + (pile.binMoves - 1) % 3
+    rules.launch(pile, [1020, 1010, 560, 790][index]); run(pile, 5)
+  }
   run(pile, 8)
   assert.equal(pile.balls.length, 18); assert.ok(pile.scored >= 10)
   assert.ok(pile.balls.some(ball => ball.y > BIN.bottom + R * 2.5))
   assert.equal(rules.moving(pile), false, 'settled pile must release the animation loop')
   for (const ball of pile.balls) assert.ok(ball.y >= R - .012)
+})
+
+test('moving paper wakes a supported sleeper regardless of launch order', () => {
+  for (const reverse of [false, true]) {
+    const resting = body(1, { x: 0, y: R, z: 2, asleep: true })
+    const arriving = body(2, { x: -.3, y: R, z: 2, vx: 4 })
+    const state = fixture(reverse ? [arriving, resting] : [resting, arriving])
+    run(state, .07)
+    assert.equal(resting.asleep, false)
+    assert.ok(resting.vx > .3); assert.ok(arriving.vx < 3)
+    run(state, 6)
+    assert.equal(rules.moving(state), false)
+  }
 })
 
 test('desk undersides, front edges and all sixteen legs bounce full-speed paper without triggering a person reaction', () => {
@@ -242,7 +358,7 @@ test('legacy bin contents move with the distant bin; all old paper and scores su
     body(4, { x: -1.5, y: 1.135, z: 3.5, asleep: true })
   ] }
   const restored = rules.restore(legacy)
-  assert.equal(restored.version, 6); assert.equal(restored.throws, 4); assert.equal(restored.scored, 2)
+  assert.equal(restored.version, 7); assert.equal(restored.throws, 4); assert.equal(restored.scored, 2)
   assert.equal(restored.yaw, legacy.yaw + rules.DEFAULT_AIM.yaw); assert.equal(restored.pitch, legacy.pitch)
   for (const ball of restored.balls.slice(0, 2)) {
     assert.ok(Math.hypot(ball.x - BIN.x, ball.z - BIN.z) < rules.binRadius(ball.y) - R - BIN.wall)
@@ -306,8 +422,8 @@ test('hit breaks the miss streak; overlapping shots resolve once in launch order
 test('gravity-filled bin piles above the rim and spills; paper never disappears or compresses into the bin', () => {
   const state = require('../tools/office-pile.cjs').fullBin()
   assert.equal(state.balls.length, 110)
-  assert.ok(state.balls.some(ball => rules.inBinPile(ball) && ball.y > BIN.height + R * .3))
-  assert.ok(state.balls.some(ball => !rules.inBinPile(ball) && ball.y < BIN.height), 'overflow must fall outside')
+  assert.ok(state.balls.some(ball => rules.inBinPile(ball, state) && ball.y > BIN.height + R * .3))
+  assert.ok(state.balls.some(ball => !rules.inBinPile(ball, state) && ball.y < BIN.height), 'overflow must fall outside')
   for (const ball of state.balls) assert.ok(Number.isFinite(ball.y) && ball.y >= R - .012)
   for (let a = 0; a < state.balls.length; a++) for (let b = a + 1; b < state.balls.length; b++) {
     const one = state.balls[a]; const two = state.balls[b]

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f5f3eb">
+  <title>滴滴叭叭 · 一起开一会儿车</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="selection-page">
+  <div class="page">
+    <header class="masthead">
+      <a class="wordmark" href="./" aria-label="滴滴叭叭首页"><span class="brand-icon" aria-hidden="true"><i></i><i></i><i></i></span><strong>滴滴叭叭<span>ROAD TRIP</span></strong></a>
+      <nav aria-label="页面导航"><a href="#setup" class="current">去兜风</a><a href="#garage">小小车库</a><button id="help-open">怎么玩 <span>↗</span></button></nav>
+      <span class="edition"><i></i> 可玩预览 <b>VOL. 01</b></span>
+    </header>
+
+    <main>
+      <section class="intro" aria-labelledby="title">
+        <div><p class="eyebrow">A LITTLE DRIVE, A LITTLE ESCAPE.</p><h1 id="title">没什么急事，<span>开一会儿车。</span><svg viewBox="0 0 92 33" fill="none" aria-hidden="true"><path d="M2 25c16-28 31-28 41-7S66 36 88 3M74 3h15v15" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></h1></div>
+        <p class="intro-copy">挑一辆喜欢的小车，<br>去街区、田野和地标兜兜风。</p>
+      </section>
+
+      <div class="setup-layout" id="setup">
+<aside class="sidebar setup-options" aria-label="车辆与驾驶设置">
+          <section class="mode-section"><div class="section-heading"><h2><span>01</span> 选一种节奏</h2><span class="tiny-note">出发前选好</span></div>
+            <div class="mode-tabs" role="group" aria-label="驾驶模式"><button data-mode="cruise" class="active" aria-pressed="true">自动巡航 <span>轻松</span></button><button data-mode="manual" aria-pressed="false">手动驾驶</button></div>
+            <p id="mode-description">油门交给车，方向交给你。<br>自动跟车，想超车时再加速。</p>
+            <div class="key-guide"><span><kbd>←</kbd><kbd>→</kbd><b id="steer-label">切换车道</b></span><span><kbd>↑</kbd><b>按住加速</b></span><span><kbd>↓</kbd><b>按住减速</b></span><span><kbd>空格</kbd><b>暂停 / 继续</b></span></div>
+          </section>
+
+          <section class="garage-section" id="garage"><div class="section-heading"><h2><span>02</span> 今天开什么</h2><span class="tiny-note">6 辆小车</span></div><div class="garage" id="car-list" role="group" aria-label="选择车辆"></div><div class="car-note"><span id="car-note">小身材，大好心情。</span><span id="car-spec">172 <small>km/h</small></span></div></section>
+
+          <section class="traffic-section"><div class="section-heading"><h2><span>03</span> 路上的热闹</h2></div><div class="density" role="group" aria-label="车流密度"><button data-density="easy" class="active" aria-pressed="true"><i></i>松弛</button><button data-density="normal" aria-pressed="false"><i></i><i></i>日常</button><button data-density="busy" aria-pressed="false"><i></i><i></i><i></i>高峰</button></div></section>
+
+          <div class="departure"><div class="scoring-guide" aria-label="积分规则"><span><b>+10</b> 每 100 米</span><span><b>+20</b> 漂亮穿梭</span><span><b>−100 / −200</b> 超速分档扣分</span></div><button class="start-button" id="start"><span>开始兜风</span><b>↗</b></button><p id="departure-note"><i></i> 每 1.6 km 出现右侧出口，驶出结束并结算。</p></div>
+        </aside>
+      </div>
+      <footer><span><i></i> 一个关于「在路上」的小实验</span><span>戴上耳机，给自己几分钟。 <span class="footer-road">━━ ━━ ━━ →</span></span></footer>
+    </main>
+  </div>
+  <dialog id="help"><button class="dialog-close" id="help-close" aria-label="关闭玩法">×</button><p class="eyebrow">A SMALL GUIDE TO THE OPEN ROAD</p><h2>想怎么开，就怎么开。</h2><p><strong>自动巡航</strong> · 车辆会自己前进、跟随前车减速。按 ← / → 或 A / D 换道；按住 ↑ 或 W 加速超车，松开后恢复跟车。</p><p><strong>手动驾驶</strong> · 按住 ← / → 或 A / D 连续转向，松手保持位置；按住 ↑ / W 加速，松手滑回 68 km/h。按住 ↓ / S 刹车。</p><p>空格或 P 暂停；手机使用画面下方的按钮。自动巡航换道时会避让并排的小车，手动模式需要自己留意车距。碰撞后可以再开一程。</p><p>从右侧匝道自动汇入；路面会出现弯道与车道收窄，提前 180 米提示并道。自动巡航会寻找空隙向左并道，手动驾驶请按提示调整方向。每行驶 1.6 km 出现右侧结算出口；出口前可点「驶出结算」或按 E。自动巡航辅助靠右，手动驾驶需先驶入最右车道；沿匝道驶出后结束游戏，错过出口可继续累积分数。</p><p><strong>积分规则</strong> · 每行驶 100 米 +10 分；从相邻车道干净利落地超车，漂亮穿梭 +20 分，每辆车只奖励一次。积分可以为负数；发生事故后，本程积分清零。</p><p><strong>超速抓拍</strong> · 前方 220 米提示抓拍，限速 80 km/h，经过抓拍线时，超速不超过 10% 不扣分；超过 10% 扣 100 分，超过 20% 扣 200 分，单次只扣最高一档。即车速超过 88 km/h 扣 100 分，超过 96 km/h 扣 200 分。自动巡航会提前减速；按住加速时请自己留意车速，及时松开油门或刹车。</p><p>小车只作风格化外观参考。返回选择页可更换车辆、驾驶模式与车流；再次出发会开启新行程。</p><button id="help-done">知道了，去兜风 →</button></dialog>
+  <script src="route.js"></script><script src="rules.js"></script><script src="scenery.js"></script><script src="art.js"></script><script src="renderer.js"></script><script src="settings.js"></script><script src="garage.js"></script>
+</body>
+</html>

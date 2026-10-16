@@ -7,6 +7,19 @@ const GRAVITY = 9.8
 const MAX_CHARGE_MS = 1600
 const ROOM = { left: -3, right: 2.55, near: .05, far: 6.05, ceiling: 4 }
 const BIN = { x: 2.08, z: 5.55, bottom: .035, height: .58, baseRadius: .235, radius: .32, wall: .015 }
+const BIN_POSITIONS = [
+  { x: BIN.x, z: BIN.z },
+  { x: 1.85, z: 5.65 },
+  { x: 1.45, z: 3.35 },
+  { x: 2.08, z: 4.25 }
+]
+const BIN_GOAL = 5
+const BINS = BIN_POSITIONS.map(position => ({ ...BIN, ...position }))
+function currentBin(state) {
+  const moves = state ? state.binMoves || 0 : 0
+  const index = moves === 0 ? 0 : 1 + (moves - 1) % (BIN_POSITIONS.length - 1)
+  return BINS[index]
+}
 const ORIGIN = { x: .17, y: .86, z: .45 }
 const DEFAULT_AIM = { yaw: Math.atan2(BIN.x - ORIGIN.x, BIN.z - ORIGIN.z), pitch: .48 }
 const HIT_LIMIT = 8
@@ -89,7 +102,8 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 const binRadius = y => BIN.baseRadius + (BIN.radius - BIN.baseRadius) * clamp((y - BIN.bottom) / (BIN.height - BIN.bottom), 0, 1)
 
 function initialState() {
-  return { version: 6, ...DEFAULT_AIM, throws: 0, scored: 0, cleared: 0, clearedScored: 0,
+  return { version: 7, ...DEFAULT_AIM, throws: 0, scored: 0, cleared: 0, clearedScored: 0,
+    binMoves: 0, nextBinAt: BIN_GOAL,
     nextId: 1, balls: [], remainder: 0, missStreak: 0, reactionSerial: 0, reaction: null, cleanupIn: 0,
     personHits: PEOPLE.map(() => 0), totalPersonHits: 0, propHits: {}, gameOver: null }
 }
@@ -219,6 +233,7 @@ function personImpact(state, ball, solid, impact) {
 }
 
 function staticCollisions(ball, state, grid) {
+  const BIN = currentBin(state)
   const r = RADIUS
   if (ball.y <= r + .006) bounce(ball, 0, 1, 0, Math.max(0, r - ball.y))
   if (ball.y > ROOM.ceiling - r) bounce(ball, 0, -1, 0, ball.y - (ROOM.ceiling - r))
@@ -271,15 +286,25 @@ function ballPairs(balls) {
   const cell = RADIUS * 2 + .008
   const grid = new Map()
   const pairs = []
-  for (const ball of balls) {
+  for (let index = 0; index < balls.length; index++) {
+    const ball = balls[index]
+    const key = pairKey(Math.floor(ball.x / cell), Math.floor(ball.y / cell), Math.floor(ball.z / cell))
+    if (!grid.has(key)) grid.set(key, [])
+    grid.get(key).push(index)
+  }
+  for (let index = 0; index < balls.length; index++) {
+    const ball = balls[index]
+    // Supported sleepers need no neighborhood search. Moving paper still
+    // queries them and can wake them; unsupported sleepers still check stacks.
+    if (ball.asleep && ball.supported) continue
     const ix = Math.floor(ball.x / cell); const iy = Math.floor(ball.y / cell); const iz = Math.floor(ball.z / cell)
     for (let x = ix - 1; x <= ix + 1; x++) for (let y = iy - 1; y <= iy + 1; y++) for (let z = iz - 1; z <= iz + 1; z++) {
       const bucket = grid.get(pairKey(x, y, z))
-      if (bucket) for (const other of bucket) pairs.push([ball, other])
+      if (bucket) for (const other of bucket) {
+        if (other === index || (other > index && (!balls[other].asleep || !balls[other].supported))) continue
+        pairs.push([ball, balls[other]])
+      }
     }
-    const key = pairKey(ix, iy, iz)
-    if (!grid.has(key)) grid.set(key, [])
-    grid.get(key).push(ball)
   }
   return pairs
 }
@@ -320,6 +345,7 @@ function collidePair(a, b) {
 }
 
 function step(state) {
+  const BIN = currentBin(state)
   if (state.reaction) {
     state.reaction.remaining -= STEP
     if (state.reaction.remaining <= 0) state.reaction = null
@@ -384,16 +410,36 @@ function step(state) {
       if (line.mood === 'angry') state.cleanupIn = 4.4
     }
   }
+  if (state.scored >= state.nextBinAt && !moving(state)) relocateBin(state)
+}
+
+function relocateBin(state) {
+  const before = currentBin(state)
+  const contents = new Set(state.balls.filter(ball => inBinPile(ball, state)))
+  // Finish every shot already in flight before changing its target. If several
+  // score together, consume each milestone once and move straight to the result.
+  const moves = Math.floor((state.scored - state.nextBinAt) / BIN_GOAL) + 1
+  state.binMoves += moves; state.nextBinAt += moves * BIN_GOAL
+  const after = currentBin(state)
+  for (const ball of state.balls) {
+    if (contents.has(ball)) { ball.x += after.x - before.x; ball.z += after.z - before.z }
+    // Settle the moved pile and any loose paper near the new bin naturally.
+    if (contents.has(ball) || Math.hypot(ball.x - after.x, ball.z - after.z) < BIN.radius + RADIUS * 2 ||
+        Math.hypot(ball.x - before.x, ball.z - before.z) < BIN.radius + RADIUS * 2) {
+      ball.asleep = false; ball.quiet = 0; ball.previousY = ball.y
+    }
+  }
 }
 
 function moving(state) { return state.balls.some(ball => !ball.asleep) }
-function active(state) { return !state.gameOver && (moving(state) || !!state.reaction || state.cleanupIn > 0) }
-function inBinPile(ball) {
+function active(state) { return !state.gameOver && (moving(state) || !!state.reaction || state.cleanupIn > 0 || state.scored >= state.nextBinAt) }
+function inBinPile(ball, state) {
+  const BIN = currentBin(state)
   return ball.y >= BIN.bottom + RADIUS - .012 &&
     Math.hypot(ball.x - BIN.x, ball.z - BIN.z) <= binRadius(ball.y) - BIN.wall + RADIUS * .35
 }
 function clearPaper(state, all = true) {
-  const removed = state.balls.filter(ball => all || (ball.asleep && !inBinPile(ball)))
+  const removed = state.balls.filter(ball => all || (ball.asleep && !inBinPile(ball, state)))
   const ids = new Set(removed.map(ball => ball.id))
   state.balls = state.balls.filter(ball => !ids.has(ball.id))
   state.cleared += removed.length
@@ -413,7 +459,8 @@ function tick(state, milliseconds) {
 }
 
 function snapshot(state) {
-  return { version: 6, yaw: state.yaw, pitch: state.pitch, throws: state.throws, scored: state.scored,
+  return { version: 7, yaw: state.yaw, pitch: state.pitch, throws: state.throws, scored: state.scored,
+    binMoves: state.binMoves, nextBinAt: state.nextBinAt,
     totalPersonHits: state.totalPersonHits, propHits: { ...state.propHits }, gameOver: state.gameOver,
     cleared: state.cleared, clearedScored: state.clearedScored, missStreak: state.missStreak,
     reactionSerial: state.reactionSerial, reaction: state.reaction && { ...state.reaction }, cleanupIn: state.cleanupIn,
@@ -425,10 +472,13 @@ function snapshot(state) {
 
 function restore(value) {
   const fallback = initialState()
-  if (!value || ![1, 2, 3, 4, 5, 6].includes(value.version) || !Array.isArray(value.balls) ||
+  if (!value || ![1, 2, 3, 4, 5, 6, 7].includes(value.version) || !Array.isArray(value.balls) ||
       !Number.isSafeInteger(value.throws) || value.throws < 0 || !Number.isSafeInteger(value.scored) ||
       value.scored < 0 || value.scored > value.throws ||
       !Number.isFinite(value.yaw) || !Number.isFinite(value.pitch)) return fallback
+  if (value.version >= 7 && (!Number.isSafeInteger(value.binMoves) || value.binMoves < 0 || value.binMoves > Math.floor(value.scored / BIN_GOAL) ||
+      !Number.isSafeInteger(value.nextBinAt) || value.nextBinAt % BIN_GOAL !== 0 ||
+      value.nextBinAt < (value.binMoves + 1) * BIN_GOAL || value.nextBinAt > value.scored + BIN_GOAL)) return fallback
   const cleared = value.version < 4 ? 0 : value.cleared
   const clearedScored = value.version < 4 ? 0 : value.clearedScored
   if (!Number.isSafeInteger(cleared) || cleared < 0 || value.balls.length + cleared !== value.throws ||
@@ -494,6 +544,8 @@ function restore(value) {
     }
   }
   return { ...fallback, yaw: clamp(value.yaw + (value.version < 3 ? DEFAULT_AIM.yaw : 0), -.68, .68), pitch: clamp(value.pitch, .12, 1.12),
+    binMoves: value.version >= 7 ? value.binMoves : 0,
+    nextBinAt: value.version >= 7 ? value.nextBinAt : (Math.floor(value.scored / BIN_GOAL) + 1) * BIN_GOAL,
     throws: value.throws, scored: value.scored, cleared, clearedScored,
     nextId: Math.max(maxId + 1, value.throws + 1, value.nextId || 1), balls,
     ...(value.version >= 4 ? { missStreak: value.missStreak, reactionSerial: value.reactionSerial,
@@ -502,6 +554,6 @@ function restore(value) {
     ...(value.version >= 6 ? { totalPersonHits: value.totalPersonHits, propHits: { ...value.propHits }, gameOver: value.gameOver } : {}) }
 }
 
-module.exports = { SAVE_KEY, STEP, RADIUS, MAX_CHARGE_MS, ROOM, BIN, ORIGIN, DEFAULT_AIM, DESKS, PEOPLE, SOLIDS, PROPS, HIT_LIMIT,
+module.exports = { SAVE_KEY, STEP, RADIUS, MAX_CHARGE_MS, ROOM, BIN, BIN_POSITIONS, BIN_GOAL, currentBin, ORIGIN, DEFAULT_AIM, DESKS, PEOPLE, SOLIDS, PROPS, HIT_LIMIT,
   propSolid,
   armPoints, binRadius, initialState, aim, launch, tick, moving, active, inBinPile, clearPaper, snapshot, restore }
