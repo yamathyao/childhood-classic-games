@@ -1,7 +1,7 @@
 const { text, box, path } = require('../../common/canvas.js')
 const rules = require('./rules.js')
 const { drawRider, drawProp, drawPanorama, drawEarth } = require('./art.js')
-const { drawScenery, drawRoute, drawLandmarkSigns } = require('./scenery.js')
+const { drawBackgroundScenery, drawScenery, drawRoute, drawLandmarkSigns, drawRoadsideSign } = require('./scenery.js')
 const C = { sky: '#edf0e8', ink: '#304749', muted: '#758585', forest: '#667c62', lime: '#d7bd80', orange: '#b36d47' }
 
 function polygon(c, points, fill, stroke, width = 1) {
@@ -139,20 +139,17 @@ function landscape(c, view, state, art) {
   }
   xs.push(to); xs.sort((a, b) => a - b)
   const road = xs.map(x => [projectX(x), projectY(rules.terrain(x))])
-  for (let x = Math.floor(from / 210) * 210; x <= to; x += 210) {
-    if (rules.surfaceKind(x) !== 'dirt') continue
-    const seed = Math.abs(Math.floor(x / 210) * 37 % 41)
-    const height = (110 + seed * 2) * scale
-    const px = projectX(x + seed); const ground = projectY(rules.terrain(x + seed))
-    line(c, [[px, ground + 8], [px, ground - 45 * scale]], '#625a43', 6 * scale)
-    c.save(); c.globalAlpha = .68
-    drawProp(c, art, 0, px, ground - 40 * scale, height * .45, height)
-    c.restore()
+  drawBackgroundScenery(c, art, from, to, projectX, projectY, scale, xs)
+  drawLandmarkSigns(c, from, to, projectX, projectY, scale)
+  for (let i = Math.max(0, Math.floor(from / rules.SECTION)); i <= Math.floor(to / rules.SECTION); i++) {
+    const f = rules.feature(i)
+    if (f.end < from || f.start > to) continue
+    drawRoadsideSign(c, projectX, projectY, f.start - 26, scale, f.kind === 'drop' ? '↘' : '↗', C.lime, 35, 22, 20)
+    if (f.kind === 'drop') drawRoadsideSign(c, projectX, projectY, f.lip - 15, scale, '!', '#d8844e', 34, 20, 15, 40)
   }
   paintGround(c, road, rect, from, to, projectX, projectY, cameraY, scale, art)
   drawScenery(c, art, from, to, projectX, projectY, scale, state.time)
   drawRoute(c, art, from, to, projectX, projectY, scale, state.time)
-  drawLandmarkSigns(c, from, to, projectX, projectY, scale)
   for (let x = Math.floor(from / 110) * 110; x <= to; x += 110) {
     if (rules.surfaceKind(x) === 'highway' || rules.surfaceKind(x) === 'railway') continue
     const seed = Math.abs(Math.floor(x / 110) * 19 % 29)
@@ -167,16 +164,6 @@ function landscape(c, view, state, art) {
       for (let x = f.start + 18; x < f.lip; x += 22) line(c, [[projectX(x), projectY(rules.terrain(x))],
         [projectX(x), projectY(rules.terrain(f.lip))]], '#76563c', 2)
       line(c, [[projectX(f.start), projectY(rules.terrain(f.start))], [projectX(f.lip), projectY(rules.terrain(f.lip - .01))]], '#e4bc7e', 5)
-    }
-    const signX = projectX(f.start - 26); const signY = projectY(rules.terrain(f.start - 26))
-    line(c, [[signX, signY], [signX, signY - 48]], '#c4c39b', 3)
-    box(c, { x: signX - 17, y: signY - 58, w: 35, h: 22 }, C.lime, 3)
-    text(c, f.kind === 'drop' ? '↘' : '↗', signX, signY - 47, 20, C.ink, 'center')
-    if (f.kind === 'drop') {
-      const edgeX = projectX(f.lip - 15); const edgeY = projectY(rules.terrain(f.lip - 15))
-      line(c, [[edgeX, edgeY], [edgeX, edgeY - 31]], '#d4b783', 3)
-      box(c, { x: edgeX - 17, y: edgeY - 45, w: 34, h: 20 }, '#d8844e', 3)
-      text(c, '!', edgeX, edgeY - 35, 15, '#fff5dc', 'center')
     }
   }
   for (const obstacle of rules.obstacles(from, to)) {

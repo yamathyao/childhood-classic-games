@@ -11,18 +11,81 @@ function prop(c, art, index, x, y, width) {
   const bounds = atlas[index]
   return drawProp(c, art, index, x, y, width, width * bounds[3] / bounds[2])
 }
-function drawScenery(c, art, from, to, px, py, scale) {
-  // Camps stay sparse and behind the riding line.
+// Depth is a visual offset into the hillside, never a change to the ride model.
+function hillsideHeight(x) {
+  const feature = rules.feature(Math.max(0, Math.floor(x / rules.SECTION)))
+  // Wooden and shaped jumps belong to the trail; the hillside beside them
+  // follows the natural slope instead of forming a tall wall behind the ramp.
+  return feature.kind !== 'drop' && x >= feature.start && x < feature.end ? rules.baseHeight(x) : rules.terrain(x)
+}
+function roadside(px, py, x, depth) {
+  return [px(x + depth * .38), py(hillsideHeight(x) - depth)]
+}
+function verge(c, px, py, x, halfWidth, depth, scale) {
+  const back = []; const front = []
+  for (let i = 0; i <= 8; i++) {
+    const at = x - halfWidth + halfWidth * 2 * i / 8
+    const taper = Math.min(1, i / 2, (8 - i) / 2)
+    back.push(roadside(px, py, at, -8 + (depth + 8) * taper))
+    front.push(roadside(px, py, at, -8))
+  }
+  polygon(c, back.concat(front.slice().reverse()), '#9eae86')
+  stroke(c, back, '#c0c9a2', 2 * scale)
+  // Cross-depth tufts make the broad grassy shoulder read as a ground plane.
+  for (let i = 1; i < 5; i++) {
+    const at = x - halfWidth + halfWidth * 2 * i / 5
+    const [sx, sy] = roadside(px, py, at, depth * .35)
+    stroke(c, [[sx - 4 * scale, sy + 2 * scale], [sx, sy - 2 * scale], [sx + 7 * scale, sy - scale]], '#869875', scale)
+  }
+}
+function backgroundProp(c, art, index, x, depth, width, px, py, scale) {
+  const [sx, sy] = roadside(px, py, x, depth)
+  const w = width * scale
+  // A flattened, skewed contact shadow anchors each sprite on the back plane.
+  polygon(c, [[sx - w * .48, sy], [sx - w * .26, sy - 4 * scale],
+    [sx + w * .55, sy - 2 * scale], [sx + w * .34, sy + 3 * scale]], '#7e9074')
+  prop(c, art, index, sx, sy, w)
+}
+function drawBackgroundScenery(c, art, from, to, px, py, scale, samples = []) {
+  // Everything here is non-collidable and is painted behind the riding ground.
+  if (samples.length) {
+    // Reuse the actual trail samples, including both sides of every cliff.
+    // A continuous back plane supports the trees and camps without floating pads.
+    const xs = [samples[0] - 70].concat(samples, [samples[samples.length - 1] + 70])
+    const back = xs.map(x => roadside(px, py, x, 96))
+    const front = xs.map(x => [px(x), py(rules.terrain(x) + 8)])
+    polygon(c, back.concat(front.reverse()), '#9eae86')
+    stroke(c, back, '#c0c9a2', 2 * scale)
+    for (let x = Math.floor(from / 85) * 85; x <= to; x += 85) {
+      const [sx, sy] = roadside(px, py, x, 28)
+      stroke(c, [[sx - 4 * scale, sy + 2 * scale], [sx, sy - 2 * scale],
+        [sx + 7 * scale, sy - scale]], '#869875', scale)
+    }
+  }
   for (const item of rules.landmarks(from, to)) {
     if (item.kind !== 'camp') continue
-    c.save(); c.globalAlpha = .76
+    c.save(); c.globalAlpha = .84
+    backgroundProp(c, art, 15, item.x - 45, 90, 96, px, py, scale)
     for (const [index, offset, width] of [[4, -80, 94], [5, 2, 36], [6, 68, 35], [7, -165, 28]]) {
-      const x = item.x + offset
-      prop(c, art, index, px(x), py(rules.terrain(x) - 4), width * scale)
+      backgroundProp(c, art, index, item.x + offset, 66, width * .74, px, py, scale)
     }
-    prop(c, art, 15, px(item.x - 45), py(rules.terrain(item.x - 45) - 68), 120 * scale)
     c.restore()
   }
+  for (let x = Math.floor(from / 210) * 210; x <= to; x += 210) {
+    if (rules.surfaceKind(x) !== 'dirt') continue
+    const seed = Math.abs(Math.floor(x / 210) * 37 % 41)
+    const height = (110 + seed * 2) * scale * .82
+    const [sx, sy] = roadside(px, py, x + seed, 72)
+    c.save(); c.globalAlpha = .78
+    if (!drawProp(c, art, 0, sx, sy, height * .45, height)) {
+      stroke(c, [[sx, sy], [sx, sy - height * .72]], '#75806a', 4 * scale)
+      polygon(c, [[sx, sy - height], [sx - height * .25, sy - height * .18],
+        [sx + height * .25, sy - height * .18]], '#81957d')
+    }
+    c.restore()
+  }
+}
+function drawScenery(c, art, from, to, px, py, scale) {
   for (const solid of rules.surfaces(from, to)) {
     if (solid.kind !== 'van') continue
     const x = px(solid.x); const y = py(solid.y); const w = solid.w * scale; const h = solid.h * scale
@@ -121,10 +184,20 @@ function drawRoute(c, art, from, to, px, py, scale, time = 0) {
 }
 function drawLandmarkSigns(c, from, to, px, py, scale) {
   for (const item of rules.routes(from, to)) {
-    const x = item.start - 45; const y = rules.terrain(x)
-    stroke(c, [[px(x), py(y)], [px(x), py(y - 50)]], '#765f46', 3 * scale)
-    box(c, { x: px(x) - 37 * scale, y: py(y - 62), w: 74 * scale, h: 22 * scale }, '#ded1ad', 3 * scale)
-    text(c, item.name, px(x), py(y - 51), 11 * scale, '#304749', 'center')
+    drawRoadsideSign(c, px, py, item.start - 45, scale, item.name, '#ded1ad', 74, 22, 11, 62)
   }
 }
-module.exports = { drawScenery, drawRoute, drawLandmarkSigns }
+function drawRoadsideSign(c, px, py, x, scale, label, color, width, height, fontSize, depth = 48) {
+  verge(c, px, py, x, Math.max(32, width * .6), depth + 14, scale)
+  const [sx, sy] = roadside(px, py, x, depth)
+  const size = scale * .82; const top = sy - 54 * size
+  stroke(c, [[sx, sy], [sx, top]], '#827760', 3 * size)
+  // The dark side face gives the signboard thickness and a clear oblique edge.
+  polygon(c, [[sx + width / 2 * size, top - height / 2 * size],
+    [sx + (width / 2 + 4) * size, top - (height / 2 + 3) * size],
+    [sx + (width / 2 + 4) * size, top + (height / 2 - 3) * size],
+    [sx + width / 2 * size, top + height / 2 * size]], '#887d61')
+  box(c, { x: sx - width / 2 * size, y: top - height / 2 * size, w: width * size, h: height * size }, color, 2 * size)
+  text(c, label, sx, top, fontSize * size, '#304749', 'center')
+}
+module.exports = { drawBackgroundScenery, drawScenery, drawRoute, drawLandmarkSigns, drawRoadsideSign }

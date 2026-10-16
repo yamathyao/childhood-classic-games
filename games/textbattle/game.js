@@ -202,9 +202,9 @@ function start({ context, screen: initialScreen, goHome }) {
         return contains(view.growthHome, touch) ? 'home' : contains(view.growthRestart, touch) ? 'restart' :
           pendingChoice && contains(view.growthConfirm, touch) ? 'confirmUpgrade' : null
       }
-      if (['help', 'weapons', 'relations', 'momentum'].includes(modal)) {
+      if (['help', 'weapons', 'momentum'].includes(modal)) {
         const index = view.guideTabs.findIndex(rect => contains(rect, touch))
-        if (index >= 0) return `guide:${['help', 'weapons', 'relations', 'momentum'][index]}`
+        if (index >= 0) return `guide:${['help', 'weapons', 'momentum'][index]}`
         return contains(view.guidePrimary, touch) ? 'primary' : contains(view.guideSecondary, touch) ? 'secondary' : null
       }
       return contains(view.modalPrimary, touch) ? 'primary' : contains(view.modalSecondary, touch) ? 'secondary' : null

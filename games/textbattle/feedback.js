@@ -37,6 +37,8 @@ function recordEvents(feedback, state, events, now) {
     const at = now - Math.max(0, state.elapsedMs - event.time)
     if (now - at < lifetime) effects.push({ ...event, at,
       weapon: event.side === 'player' ? state.weapon : state.enemy.weapon })
+    if (now - at < lifetime && event.reflected) effects.push({ side: event.side === 'player' ? 'enemy' : 'player',
+      damage: event.reflected, reflectedHit: true, at, time: event.time, weapon: 'sword' })
   }
   if (effects.length > 6) effects.splice(0, effects.length - 6)
   for (const side of ['player', 'enemy']) {

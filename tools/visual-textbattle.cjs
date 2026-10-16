@@ -38,13 +38,145 @@ async function main() {
         assert.ok(target, 'Missing control: ' + label)
         await page.mouse.click(target.x, target.y)
       }
-      const swipeHome = () => page.evaluate(() => {
+      const swipeHome = async () => {
+        await page.evaluate(() => {
+        const { games, normalizeOrder, saveKey } = qa.load('games/index/order.js')
+        const screen = qa.load('common/screen.js').measure()
+        const order = normalizeOrder(wx.getStorageSync(saveKey))
+        const gap = Math.min(260, Math.max(170, Math.floor((screen.height - screen.top - screen.bottom - 170) / 2))) + 16
+        const visible = qa.texts.find(item => games.some(game => game.name === item.text))
+        const visibleId = visible && games.find(game => game.name === visible.text).id
+        const targetY = visible ? visible.y + (order.indexOf('textbattle') - order.indexOf(visibleId)) * gap
+          : screen.top + 179 + order.indexOf('textbattle') * gap
         const start = { clientX: 180, clientY: innerHeight - 100, identifier: 7 }
-        const end = { ...start, clientY: start.clientY - 1800 }
+        const end = { ...start, clientY: start.clientY - (targetY - innerHeight * .5) }
         qa.emit('TouchStart', { changedTouches: [start], touches: [start] })
         qa.emit('TouchMove', { changedTouches: [end], touches: [end] })
         qa.emit('TouchEnd', { changedTouches: [end], touches: [] })
-      })
+        })
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
+      }
+      if (process.argv.includes('--uncapped-only')) {
+        for (const types of [['hp', 'def', 'atk'], ['spd', 'crit', 'dodge']]) {
+          const fixture = await page.evaluate(types => {
+            const rules = qa.load('games/textbattle/rules.js'); const growth = qa.load('games/textbattle/progression.js')
+            const state = rules.initialState(79)
+            for (const [id, count] of Object.entries({ atk: 5, hp: 5, def: 5, spd: 25, crit: 25, dodge: 25 })) {
+              for (let i = 0; i < count; i++) growth.add(state.progression, { id, quality: 'legendary' })
+            }
+            Object.assign(state, { round: 92, streak: 91 }); state.progression.pending = true
+            for (const side of ['player', 'enemy']) {
+              const actor = state[side]
+              actor.stats = rules.stats(actor.base, side === 'player' ? state.weapon : actor.weapon,
+                side === 'player' ? state.stance : 'strong', side === 'enemy', state.round, undefined, state.progression)
+              actor.hp = actor.stats.maxHp; actor.cooldown = 1000 / actor.stats.spd
+            }
+            for (let seed = 1; seed < 2000; seed++) {
+              state.runId = seed
+              const choices = rules.upgradeChoices(state)
+              if (!choices.every(item => types.includes(item.id))) continue
+              if (!rules.restore(state)) throw new Error('Invalid uncapped growth fixture')
+              const item = choices[0]; const expected = rules.upgradePreview(state, item.id)
+              wx.setStorageSync(rules.saveKey, rules.snapshot(state))
+              return { state, choices, expected, name: item.name }
+            }
+            throw new Error('Missing uncapped growth candidates')
+          }, types)
+          await swipeHome(); await click('文字对战'); await click('继续挑战')
+          const inspect = () => page.evaluate(() => {
+            const rules = qa.load('games/textbattle/rules.js'); const state = wx.getStorageSync(rules.saveKey)
+            const choices = rules.upgradeChoices(state)
+            return choices.length === 3 && !qa.drawn.some(item => item.text.includes('已到属性上限')) &&
+              choices.every(item => {
+                const key = item.id === 'hp' ? 'maxHp' : item.id
+                return Math.abs(rules.upgradePreview(state, item.id)[key] - state.player.stats[key] - item.amount) < 1e-10
+              })
+          })
+          assert.ok(await inspect())
+          await page.screenshot({ path: path.join(output, `uncapped-${types[0]}-${width}.png`) })
+          await page.reload(); await trackDrawing(); await swipeHome(); await click('文字对战'); await click('继续挑战')
+          assert.ok(await inspect()); assert.deepEqual(await page.evaluate(() => wx.getStorageSync('textbattle.v5')), fixture.state)
+          await click(fixture.name); await click('确认强化')
+          const confirmed = await page.evaluate(() => wx.getStorageSync('textbattle.v5'))
+          assert.deepEqual(confirmed.player.stats, fixture.expected); assert.equal(confirmed.progression.pending, false)
+          assert.equal(confirmed.player.hp, fixture.expected.maxHp)
+          await click('游戏合集')
+        }
+        assert.deepEqual(errors, []); await page.close()
+        console.log(`${width}x${height}: uncapped growth previews, confirmation and reload passed`)
+        continue
+      }
+      if (process.argv.includes('--skills-only')) {
+        await page.evaluate(async () => {
+          const image = wx.createImage()
+          await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; image.src = 'assets/textbattle/fighters-2d.png' })
+          qa.feedbackArt = { image }
+        })
+        for (const weapon of ['sword', 'saber', 'spear', 'dual', 'axe', 'halberd']) {
+          const result = await page.evaluate(weapon => {
+            const rules = qa.load('games/textbattle/rules.js'); const visual = qa.load('games/textbattle/feedback.js')
+            const renderer = qa.load('games/textbattle/renderer.js')
+            const screen = qa.load('common/screen.js').measure()
+            const state = rules.initialState(42); rules.configure(state, 'weapon', weapon)
+            const prepareView = qa.load('games/textbattle/layout.js').layout(screen, true)
+            const c = document.querySelector('canvas').getContext('2d')
+            renderer.draw(c, prepareView, state, { modal: null, best: [], now: 0, art: qa.feedbackArt })
+            const description = rules.weaponSkill(weapon).description
+            const prepared = qa.drawn.find(item => item.text === description)
+            const fits = prepared && prepared.x + prepared.width <= prepareView.log.x + prepareView.log.w - 8
+            renderer.draw(c, prepareView, state, { modal: 'weapons', best: [], now: 0, art: qa.feedbackArt })
+            const guide = prepareView.guideDialog
+            const descriptions = rules.weaponSkills.map(item => item.description)
+            const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
+            const lines = qa.drawn.slice(start).filter(item => descriptions.includes(item.text))
+            const guideFits = prepareView.guideTabs.length === 3 && !qa.drawn.some(item => /克制|图谱/.test(item.text)) && lines.length === 6 && lines.every(item => item.x + item.width <= guide.x + guide.w - 12)
+            qa.skillFixture = { state, c, view: prepareView, renderer, visual, fits, guideFits }
+            return { fits, guideFits }
+          }, weapon)
+          assert.ok(result.fits && result.guideFits, JSON.stringify({ weapon, result }))
+          if (weapon === 'sword') await page.screenshot({ path: path.join(output, `revised-guide-${width}.png`) })
+          const released = await page.evaluate(() => {
+            const { state, c, renderer, visual } = qa.skillFixture
+            const rules = qa.load('games/textbattle/rules.js')
+            const view = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure())
+            rules.startFight(state)
+            state.player.stats.dodge = state.enemy.stats.dodge = 0
+            state.player.stats.crit = state.enemy.stats.crit = 0
+            state.player.combat.momentum = rules.momentum.max
+            state.player.cooldown = 0; state.enemy.cooldown = 1000
+            const feedback = visual.createFeedback(state, 1000)
+            let events = rules.tick(state, 1)
+            visual.recordEvents(feedback, state, events, 1000)
+            const pending = { ...state.player.combat }
+            if (['sword', 'axe', 'halberd'].includes(state.weapon)) {
+              state.player.cooldown = state.weapon === 'axe' ? 0 : 1000
+              state.enemy.cooldown = state.weapon === 'axe' ? 1000 : 0
+              const next = rules.tick(state, 1)
+              visual.recordEvents(feedback, state, next, 1200)
+              events = events.concat(next)
+            }
+            renderer.draw(c, view, state, { modal: null, best: [], now: 1330, art: qa.feedbackArt, feedback })
+            const inside = qa.drawn.filter(item => item.y > view.arena.y && item.y < view.arena.y + view.arena.h)
+            const labels = inside.map(item => item.text)
+            return { events, pending, labels,
+              wardDamage: Math.max(1, Math.round(Math.max(1, Math.round(state.enemy.stats.atk - state.player.stats.def)) * .2)),
+              fits: inside.every(item => {
+                const left = item.x - (item.align === 'center' ? item.width / 2 : item.align === 'right' ? item.width : 0)
+                return left >= view.arena.x && left + item.width <= view.arena.x + view.arena.w
+              }) }
+          })
+          assert.ok(released.fits, JSON.stringify({ weapon, released }))
+          if (weapon === 'sword') assert.ok(released.pending.reflect && released.labels.includes('反伤') && released.events.at(-1).reflected > 0)
+          if (weapon === 'dual') assert.ok(released.events.length === 2 && released.labels.includes('追击'))
+          if (weapon === 'axe') assert.ok(released.pending.guaranteedCritical && released.events.at(-1).critical)
+          if (weapon === 'halberd') assert.ok(released.pending.ward && released.labels.includes('格挡') &&
+            released.events.at(-1).guarded && released.events.at(-1).damage === released.wardDamage)
+          await page.screenshot({ path: path.join(output, `revised-${weapon}-${width}.png`) })
+        }
+        assert.deepEqual(errors, []); await page.close()
+        console.log(`${width}x${height}: revised skill guide, preparation text, real skill releases, reflection, followup, critical and block passed`)
+        continue
+      }
       if (!process.argv.includes('--feedback-only')) {
       await swipeHome()
       await page.screenshot({ path: path.join(output, `collection-${width}.png`) })
@@ -142,24 +274,10 @@ async function main() {
         const descriptions = qa.load('games/textbattle/rules.js').weaponSkills.map(item => item.description)
         const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
         const drawn = qa.drawn.slice(start).filter(item => descriptions.includes(item.text))
-        return drawn.length === 6 && drawn.every(item => item.font.includes('12px') && item.x + item.width <= r.x + r.w - 12)
+        return drawn.length === 6 && drawn.every(item => parseFloat(item.font.split(' ')[1]) >= 10 && item.x + item.width <= r.x + r.w - 12)
       }))
-      await click('克制图谱')
-      assert.ok(await page.evaluate(() => qa.drawn.filter(item => item.text === '→').length === 6 && qa.drawn.filter(item => item.text === '←').length === 6 && qa.drawn.filter(item => item.text === '=').length === 24))
-      assert.ok(await page.evaluate(() => {
-        const rules = qa.load('games/textbattle/rules.js')
-        const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
-        const start = qa.drawn.map(item => item.text).lastIndexOf('玩法指南')
-        const rows = qa.drawn.slice(start).filter(item => item.y >= r.y && item.y < r.y + r.h)
-        return !rows.some(item => /刀客|卫士|刺客|力士|铁壁|影袭/.test(item.text)) &&
-          rules.weapons.every(weapon => rows.filter(item => item.text === weapon.name).length === 2) &&
-          rows.every(item => {
-            const left = item.x - (item.align === 'center' ? item.width / 2 : item.align === 'right' ? item.width : 0)
-            return left >= r.x && left + item.width <= r.x + r.w
-          })
-      }))
+      assert.ok(await page.evaluate(() => !qa.drawn.some(item => /克制|图谱/.test(item.text))))
       assert.deepEqual(await page.evaluate(() => wx.getStorageSync('textbattle.v5')), beforeGuide)
-      await page.screenshot({ path: path.join(output, `relations-${width}.png`) })
       await click('武势机制')
       assert.ok(await page.evaluate(() => {
         const r = qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').guideDialog
@@ -224,7 +342,7 @@ async function main() {
       const tactics = await page.evaluate(() => qa.load('games/textbattle/layout.js').layout(qa.load('common/screen.js').measure(), wx.getStorageSync('textbattle.v5').status === 'prepare').tactics)
       await page.mouse.click(tactics.x + tactics.w / 2, tactics.y + tactics.h / 2)
       const lockedWeapon = await page.evaluate(() => wx.getStorageSync('textbattle.v5').weapon)
-      await click('克制图谱'); await click('武器技能')
+      await click('武势机制'); await click('武器技能')
       assert.equal(await page.evaluate(() => wx.getStorageSync('textbattle.v5').weapon), lockedWeapon)
       await click('继续交战'); await click('暂停交战')
       await click('继续交战'); await click('游戏合集')
@@ -510,7 +628,7 @@ async function main() {
         })
         assert.ok(labelCheck.valid, JSON.stringify(labelCheck))
         await page.screenshot({ path: path.join(output, `skill-${weapon}-${width}.png`) })
-        if (weapon === 'halberd') assert.ok(await page.evaluate(() => qa.drawn.some(item => item.text === '护身')))
+        if (weapon === 'halberd') assert.ok(await page.evaluate(() => qa.drawn.some(item => item.text === '格挡')))
       }
       await page.evaluate(() => {
         const { view, state } = qa.feedbackFixture

@@ -171,6 +171,22 @@ async function main() {
         assert.ok(measurement.maxImages < 60, 'bounded visible sprites and texture draws even when zoomed out')
         await page.screenshot({ path: path.join(output, `${name}-${width}.png`) })
       }
+      // Compare distant decorations with actual obstacles at the riding line.
+      for (const name of ['ramp-sign', 'cliff-sign', 'route-sign', 'gear', 'barrier']) {
+        await page.evaluate(name => {
+          const r = qa.load('games/bicycle/rules.js'); const s = qa.bicycleState
+          Object.assign(s, r.initialState(0))
+          const x = name === 'ramp-sign' ? r.feature(0).start - 70
+            : name === 'cliff-sign' ? r.feature(2).lip - 100
+            : name === 'route-sign' ? r.route(1).start - 100
+            : (name === 'gear' ? 3 : 4) * r.SECTION + r.OBSTACLE_OFFSET - 100
+          Object.assign(s, { x, status: 'running', speed: 300, angle: r.roadAngle(x),
+            cameraY: r.terrain(x), distance: (x - 80) / 8 })
+          s.y = r.supportY(x, s.angle)
+          qa.load('games/bicycle/renderer.js').draw({ ...qa.bicycleArgs, paused: false })
+        }, name)
+        await page.screenshot({ path: path.join(output, `${name}-${width}.png`) })
+      }
       await page.evaluate(() => {
         const r = qa.load('games/bicycle/rules.js'); const s = qa.bicycleState
         Object.assign(s, r.initialState()); r.begin(s); s.x = 1100; s.angle = r.roadAngle(s.x); s.y = r.supportY(s.x, s.angle)

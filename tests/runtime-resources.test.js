@@ -22,7 +22,7 @@ function boot(game, options = {}) {
   function context(main = false) {
     const result = {}
     for (const name of ['fillRect', 'beginPath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'bezierCurveTo',
-      'closePath', 'arc', 'rect', 'fill', 'stroke', 'save', 'restore', 'clip', 'scale', 'translate', 'rotate', 'strokeRect', 'fillText']) {
+      'closePath', 'arc', 'rect', 'fill', 'stroke', 'save', 'restore', 'clip', 'scale', 'translate', 'rotate', 'setLineDash', 'strokeRect', 'fillText']) {
       result[name] = () => { if (main) metrics.calls++ }
     }
     result.fillText = (value, x, y) => { if (main) { metrics.calls++; texts.push({ text: String(value), x, y }) } }
@@ -150,7 +150,7 @@ function visibleSortNames(game) {
 
 test('collection normalizes old, malformed and duplicated order, appending new games', () => {
   assert.deepEqual(collection.normalizeOrder(['tetris', 'removed', 'tetris', 'klotski']),
-    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle', 'office', 'bicycle', 'twentyfour'])
+    ['tetris', 'klotski', 'sokoban', 'driller', 'textbattle', 'office', 'bicycle', 'twentyfour', 'roadtrip'])
   for (const invalid of [null, {}, 'tetris', 0]) assert.deepEqual(collection.normalizeOrder(invalid), defaultOrder)
   const game = boot('index', { storage: [[collection.saveKey, ['tetris', 'removed', 'tetris']]] })
   const first = game.texts.find(item => item.text === '俄罗斯方块')
@@ -198,12 +198,12 @@ test('collection long press, drag in both directions, save and restart preserve 
   const view = enterSort(game)
   assert.equal(game.timers.size, 0)
   dragSort(game, view, 4, 0)
-  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险', '算 24 点'])
+  assert.deepEqual(visibleSortNames(game), ['文字对战', '华容道', '推箱子', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险', '算 24 点', '滴滴叭叭'])
   dragSort(game, view, 0, 2)
-  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险', '算 24 点'])
+  assert.deepEqual(visibleSortNames(game), ['华容道', '推箱子', '文字对战', '俄罗斯方块', '钻地挑战', '办公室投篮', '自行车大冒险', '算 24 点', '滴滴叭叭'])
   dragSort(game, view, 3, 0)
   game.tap(view.done)
-  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller', 'office', 'bicycle', 'twentyfour']
+  const expected = ['tetris', 'klotski', 'sokoban', 'textbattle', 'driller', 'office', 'bicycle', 'twentyfour', 'roadtrip']
   assert.deepEqual(structuredClone(game.storage.get(collection.saveKey)), expected)
   assertReleased(game)
   const restarted = boot('index', { storage: [...game.storage] })
@@ -345,7 +345,8 @@ test('text battle restores live health and cooldowns, then waits for explicit re
   game.tap(view.modalPrimary); game.advance(600)
   game.scene.hide()
   const saved = game.storage.get(rules.saveKey)
-  assert.ok(saved.elapsedMs >= state.elapsedMs + 600)
+  assert.ok(Math.abs(saved.elapsedMs - state.elapsedMs - 600) < 1e-7,
+    `Resuming for 600ms must advance exactly 600ms: ${saved.elapsedMs - state.elapsedMs}`)
   const expected = rules.snapshot(state); rules.tick(expected, 600)
   assert.equal(saved.player.hp, expected.player.hp); assert.equal(saved.enemy.hp, expected.enemy.hp)
   assert.equal(saved.rng, expected.rng)
@@ -484,12 +485,16 @@ test('preparation explains each selected weapon, preserves stance text and stays
   }
 })
 
-test('weapon skills and relationship guide are read-only, pause combat and never add schedulers', () => {
+test('weapon skills and momentum guide are read-only, pause combat and never add schedulers', () => {
   const game = boot('textbattle')
   const rules = game.load('games/textbattle/rules.js')
   const view = game.load('games/textbattle/layout.js').layout(game.screen)
   const initial = structuredClone(game.storage.get(rules.saveKey))
+  assert.equal(view.guideTabs.length, 3)
+  assert.ok(!game.texts.some(item => /克制|图谱/.test(item.text)))
   game.tap(view.tactics); game.tap(view.guideTabs[2])
+  assert.ok(game.texts.some(item => item.text === '武势上限100，双方使用同一规则'))
+  assert.ok(!game.texts.some(item => /克制|图谱/.test(item.text)))
   assert.deepEqual(game.storage.get(rules.saveKey), initial)
   assert.equal(game.timers.size, 0)
   game.tap(view.guidePrimary); game.tap(view.weapons[5])
@@ -498,7 +503,7 @@ test('weapon skills and relationship guide are read-only, pause combat and never
   game.tap(view.action); game.advance(1100); assert.equal(game.timers.size, 1)
   game.tap(view.tactics)
   const paused = structuredClone(game.storage.get(rules.saveKey))
-  game.tap(view.guideTabs[2]); game.tap(view.guideTabs[3])
+  game.tap(view.guideTabs[0]); game.tap(view.guideTabs[2])
   assert.ok(game.texts.some(item => item.text === '武势上限100，双方使用同一规则'))
   game.tap(view.guideTabs[1]); game.advance(5000)
   assert.deepEqual(game.storage.get(rules.saveKey), paused); assert.equal(game.timers.size, 0)
@@ -507,7 +512,7 @@ test('weapon skills and relationship guide are read-only, pause combat and never
   assertReleased(game)
 })
 
-test('late single-card rewards use their centered touch area, confirm once and leave no scheduler', () => {
+test('late uncapped rewards keep three touch targets, confirm once and leave no scheduler', () => {
   const rules = require('../games/textbattle/rules.js')
   const state = rules.initialState(37)
   for (let round = 1; round < 100; round++) {
@@ -516,18 +521,22 @@ test('late single-card rewards use their centered touch area, confirm once and l
     const chosen = choices.find(c => c.id !== 'atk') || choices[0]
     if (round < 99) rules.chooseUpgrade(state, chosen.id)
   }
-  assert.equal(rules.upgradeChoices(state).length, 1)
+  assert.equal(rules.upgradeChoices(state).length, 3)
   const game = boot('textbattle', { storage: [[rules.saveKey, rules.snapshot(state)]] })
   const view = game.load('games/textbattle/layout.js').layout(game.screen)
   const before = structuredClone(game.storage.get(rules.saveKey))
-  game.tap(view.growthCards[0]); game.tap(view.growthConfirm)
+  game.tap(view.growthConfirm)
   assert.deepEqual(game.storage.get(rules.saveKey), before)
   game.tap(view.growthCards[1])
   assert.deepEqual(game.storage.get(rules.saveKey), before)
   assert.ok(game.texts.some(item => item.text === '已选中 ✓'))
   game.tap(view.growthConfirm)
-  const after = game.storage.get(rules.saveKey)
-  assert.equal(after.progression.pending, false); assert.equal(after.progression.counts.atk, before.progression.counts.atk + 1)
+  const chosen = rules.upgradeChoices(before)[1]
+  const after = structuredClone(game.storage.get(rules.saveKey))
+  assert.equal(after.progression.pending, false); assert.equal(after.progression.counts[chosen.id], before.progression.counts[chosen.id] + 1)
+  assert.deepEqual(after.player.stats, rules.upgradePreview(before, chosen.id))
+  game.tap(view.growthConfirm)
+  assert.deepEqual(game.storage.get(rules.saveKey), after)
   assert.ok(rules.restore(after)); assert.equal(game.timers.size, 0)
   assertReleased(game)
 })
@@ -633,6 +642,8 @@ test('normal attacks update combat regions without rebuilding static controls or
   game.scene.hide()
   const actual = game.storage.get(rules.saveKey)
   const expected = rules.snapshot(initial); rules.tick(expected, 5000)
+  assert.ok(Math.abs(actual.elapsedMs - expected.elapsedMs) < 1e-7)
+  expected.elapsedMs = actual.elapsedMs
   for (const side of ['player', 'enemy']) {
     assert.ok(Math.abs(actual[side].cooldown - expected[side].cooldown) < 1e-7)
     expected[side].cooldown = actual[side].cooldown

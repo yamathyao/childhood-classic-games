@@ -13,6 +13,8 @@ const textbattleLobby = require('../textbattle/lobby.js')
 const officeLobby = require('../office/lobby.js')
 const bicycleLobby = require('../bicycle/lobby.js')
 const twentyfourLobby = require('../twentyfour/lobby.js')
+const roadtripLobby = require('../roadtrip/lobby.js')
+const { drawCover: drawRoadtripCover } = require('../roadtrip/renderer.js')
 const { drawCover: drawTwentyfourCover } = require('../twentyfour/cards.js')
 const { drawCover: drawBicycleCover } = require('../bicycle/renderer.js')
 const { loadArt: loadBicycleArt } = require('../bicycle/art.js')
@@ -166,6 +168,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     else if (id === 'office') drawOfficeCover(c, preview)
     else if (id === 'bicycle') drawBicycleCover(c, preview, bicycleArt)
     else if (id === 'twentyfour') drawTwentyfourCover(c, preview)
+    else if (id === 'roadtrip') drawRoadtripCover(c, preview)
   }
 
   function drawSokobanPicker() {
@@ -198,6 +201,11 @@ function start({ context: c, screen: initialScreen, openGame }) {
 
   function drawDetail() {
     const { width, height, top, bottom } = screen
+    if (detailGame === 'roadtrip') {
+      const controls = roadtripLobby.drawDetail(c, screen)
+      detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
+      return
+    }
     if (detailGame === 'twentyfour') {
       const controls = twentyfourLobby.drawDetail(c, screen)
       detailBack = controls.back; detailSelect = controls.select; detailEnter = controls.enter
@@ -340,7 +348,7 @@ function start({ context: c, screen: initialScreen, openGame }) {
     if (detailGame) {
       if (contains(detailBack, t)) pressed = { ...t, action: 'back' }
       else if (contains(detailSelect, t)) pressed = { ...t, action: 'levels' }
-      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'twentyfour' ? 'twentyfour-start' : detailGame === 'bicycle' ? 'bicycle-start' : detailGame === 'office' ? 'office-start' : detailGame === 'textbattle' ? 'textbattle-start' : detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
+      else if (contains(detailEnter, t)) pressed = { ...t, action: detailGame === 'roadtrip' ? 'roadtrip-start' : detailGame === 'twentyfour' ? 'twentyfour-start' : detailGame === 'bicycle' ? 'bicycle-start' : detailGame === 'office' ? 'office-start' : detailGame === 'textbattle' ? 'textbattle-start' : detailGame === 'driller' ? 'driller-start' : detailGame === 'sokoban' ? 'sokoban-start' : detailGame === 'tetris' ? 'tetris-start' : 'start' }
       return
     }
     if (t.clientY < screen.top + 118 || t.clientY >= screen.height - screen.bottom - 22) return
@@ -425,6 +433,8 @@ function start({ context: c, screen: initialScreen, openGame }) {
     }
     if (!tap) return
     if (action === 'detail-twentyfour') { detailGame = 'twentyfour'; pickerOpen = false; repaint(); return }
+    if (action === 'detail-roadtrip') { detailGame = 'roadtrip'; pickerOpen = false; repaint(); return }
+    if (action === 'roadtrip-start') { openGame('roadtrip'); return }
     if (action === 'twentyfour-start') { openGame('twentyfour'); return }
     if (action === 'detail-bicycle') { detailGame = 'bicycle'; pickerOpen = false; repaint(); return }
     if (action === 'bicycle-start') { openGame('bicycle'); return }

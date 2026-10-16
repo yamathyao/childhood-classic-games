@@ -46,7 +46,7 @@ function drawLabels(c, effects, points, arena, now, size) {
       const value = `−${event.damage}`
       const font = Math.min(event.critical ? 21 : 17, (arena.w / 4 - 12) / (value.length * .65))
       const color = event.critical ? '#ffdc87' : event.guarded ? '#b4dfe8' : side === 'player' ? '#ffb4a2' : '#fff0cd'
-      const note = [event.critical && '暴击', event.guarded && '格挡'].filter(Boolean).join(' · ')
+      const note = [event.critical && '暴击', event.guarded && '格挡', event.reflectedHit && '反伤', event.followup && '追击'].filter(Boolean).join(' · ')
       if (note) caption(c, note, x, y - 16, 9, color, true)
       caption(c, value, x, y, font * pop, color, true)
     }

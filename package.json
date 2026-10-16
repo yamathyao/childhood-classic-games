@@ -4,7 +4,7 @@
   "private": true,
   "description": "原生微信小游戏合集",
   "scripts": {
-    "test": "node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js tests/tetris-rules.test.js tests/tetris-layout.test.js tests/tetris-game.test.js tests/driller-rules.test.js tests/driller-game.test.js tests/textbattle-rules.test.js tests/textbattle-damage.test.js tests/textbattle-strategy.test.js tests/textbattle-feedback.test.js tests/textbattle-progression.test.js tests/runtime-resources.test.js tests/office-rules.test.js tests/office-game.test.js tests/bicycle-rules.test.js tests/bicycle-game.test.js tests/bicycle-art.test.js tests/twentyfour-rules.test.js tests/twentyfour-game.test.js",
+    "test": "node --test --test-isolation=none tests/game-interaction.test.js tests/rules.test.js tests/sokoban-rules.test.js tests/sokoban-game.test.js tests/tetris-rules.test.js tests/tetris-layout.test.js tests/tetris-game.test.js tests/driller-rules.test.js tests/driller-game.test.js tests/textbattle-rules.test.js tests/textbattle-damage.test.js tests/textbattle-strategy.test.js tests/textbattle-feedback.test.js tests/textbattle-progression.test.js tests/runtime-resources.test.js tests/office-rules.test.js tests/office-game.test.js tests/bicycle-rules.test.js tests/bicycle-game.test.js tests/bicycle-art.test.js tests/twentyfour-rules.test.js tests/twentyfour-game.test.js tests/roadtrip-preview.test.js tests/roadtrip-game.test.js",
     "check": "node tools/check-project.cjs",
     "sokoban:verify": "node tools/verify-sokoban.cjs",
     "driller:verify": "node tools/verify-driller.cjs",
@@ -15,7 +15,12 @@
     "visual:twentyfour": "node tools/visual-twentyfour-native.cjs",
     "visual:twentyfour-preview": "node tools/visual-twentyfour.cjs",
     "perf:bicycle": "node tools/bicycle-performance.cjs",
-    "visual:qa": "node tools/visual-qa.cjs"
+    "visual:qa": "node tools/visual-qa.cjs",
+    "visual:roadtrip": "node tools/visual-roadtrip-native.cjs",
+    "visual:roadtrip-preview": "node tools/visual-roadtrip.cjs",
+    "roadtrip:sync-preview": "node tools/sync-roadtrip-preview.cjs"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }

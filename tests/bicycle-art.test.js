@@ -115,3 +115,87 @@ test('earth texture skips tiles above the road and draws nothing when all ground
   assert.ok(calls.every(call => call[2] === 256), 'tiles retain their world alignment')
   g.art.dispose()
 })
+
+function drawingContext() {
+  const images = []; const texts = []; const strokes = []; let points = []
+  const c = Object.fromEntries(['save', 'restore', 'translate', 'scale', 'rotate', 'fill', 'clip', 'arc',
+    'quadraticCurveTo', 'closePath', 'fillRect', 'clearRect'].map(name => [name, () => {}]))
+  c.beginPath = () => { points = [] }
+  c.moveTo = c.lineTo = (x, y) => { assert.ok(Number.isFinite(x) && Number.isFinite(y)); points.push([x, y]) }
+  c.stroke = () => strokes.push(points.slice())
+  c.drawImage = (...args) => images.push(args)
+  c.fillText = (value, x, y) => texts.push({ value, x, y })
+  return { c, images, texts, strokes }
+}
+
+test('non-collidable camp props recede up the hillside and shrink at every camera scale', () => {
+  const g = boot(); g.ready(1)
+  const rules = require('../games/bicycle/rules.js'); rules.setWorldSeed(0)
+  const { drawBackgroundScenery } = require('../games/bicycle/scenery.js')
+  const atlas = require('../games/bicycle/atlas.js')
+  const camp = rules.landmark(0); const before = rules.surfaces(0, rules.SECTION)
+  for (const scale of [.42, .76, .92]) {
+    const { c, images } = drawingContext()
+    const px = x => 80 + (x - camp.x) * scale; const py = y => 200 + y * scale
+    drawBackgroundScenery(c, g.art, camp.x - 250, camp.x + 300, px, py, scale)
+    for (const [index, offset, width] of [[4, -80, 94], [5, 2, 36], [6, 68, 35], [7, -165, 28]]) {
+      const image = images.find(call => call[1] === atlas[index][0] && call[2] === atlas[index][1])
+      assert.ok(image)
+      const [left, top, w, h] = image.slice(-4)
+      assert.ok(Math.abs(w - width * .74 * scale) < 1e-8)
+      // The decorative arrow sits beside the wooden ramp on the natural bank.
+      const ground = index === 7 ? rules.baseHeight(camp.x + offset) : rules.terrain(camp.x + offset)
+      assert.ok(Math.abs(top + h - py(ground - 66)) < 1e-8)
+      assert.ok(Math.abs(left + w / 2 - px(camp.x + offset + 66 * .38)) < 1e-8)
+    }
+    assert.ok(!images.some(call => call[1] === 4 && call[2] === 313), 'solid camper stays out of the background pass')
+  }
+  assert.deepEqual(rules.surfaces(0, rules.SECTION), before, 'visual depth never alters collision geometry')
+  g.art.dispose()
+})
+
+test('the background hillside stays smooth beside a wooden jump and retains real cliff drops', () => {
+  const rules = require('../games/bicycle/rules.js'); rules.setWorldSeed(0)
+  const { drawBackgroundScenery } = require('../games/bicycle/scenery.js')
+  for (const index of [0, 2]) {
+    const { lip } = rules.feature(index); const { c, strokes } = drawingContext()
+    drawBackgroundScenery(c, null, lip - 5, lip + 5, x => x, y => y, 1, [lip - .01, lip])
+    const back = strokes[0]
+    const drop = back[2][1] - back[1][1]
+    if (index === 0) assert.ok(Math.abs(drop) < 1, 'the ramp does not make an artificial wall on the back plane')
+    else assert.ok(drop > 260, 'the true cliff still drops on the back plane')
+  }
+})
+
+test('roadside signs have a recessed base and a board side face without covering the ride line', () => {
+  const rules = require('../games/bicycle/rules.js'); rules.setWorldSeed(0)
+  const { drawRoadsideSign } = require('../games/bicycle/scenery.js')
+  for (const x of [rules.feature(0).start - 26, rules.feature(2).lip - 15, rules.route(1).start - 45]) {
+    const { c, texts, strokes } = drawingContext()
+    drawRoadsideSign(c, x => x, y => y, x, 1, '↗', '#d7bd80', 35, 22, 20)
+    const post = strokes.find(points => points.length === 2 && points[0][0] === points[1][0])
+    assert.ok(post)
+    assert.ok(Math.abs(post[0][0] - x - 48 * .38) < 1e-8)
+    assert.equal(post[0][1], rules.terrain(x) - 48)
+    assert.ok(texts[0].y < post[0][1] - 30)
+  }
+})
+
+test('background props paint before ground while solid vehicles and hazards paint on the riding plane', () => {
+  const g = boot(); for (let i = 0; i < 4; i++) g.ready(i)
+  const rules = require('../games/bicycle/rules.js'); const { layout } = require('../games/bicycle/layout.js')
+  const { draw } = require('../games/bicycle/renderer.js'); const atlas = require('../games/bicycle/atlas.js')
+  const state = rules.initialState(0)
+  const view = layout({ width: 375, height: 667, top: 24, bottom: 16 })
+  for (const [x, decoration, solid] of [[rules.landmark(0).x - 45, 4, 8], [rules.OBSTACLE_OFFSET - 50, 0, 1]]) {
+    state.x = x; state.cameraY = rules.terrain(x); state.y = rules.supportY(x, 0); state.status = 'running'
+    const { c, images } = drawingContext()
+    draw({ context: c, view, state, art: g.art, best: { score: 0, distance: 0 }, paused: false })
+    const firstGround = images.findIndex(call => call[0] === g.art.earth)
+    const propIndex = index => images.findIndex(call => call[0] === g.art.props && call[1] === atlas[index][0] && call[2] === atlas[index][1])
+    assert.ok(firstGround >= 0 && propIndex(decoration) >= 0)
+    assert.ok(propIndex(decoration) < firstGround)
+    assert.ok(propIndex(solid) > firstGround)
+  }
+  g.art.dispose()
+})

@@ -78,24 +78,101 @@ test('strong-opponent baselines survive reload, isolate snapshots and reject mal
   assert.deepEqual(rules.restore(legacy), legacy)
 })
 
-test('fixed rewards use exact grade values, honor caps and suppress exhausted types', () => {
+test('fixed rewards use exact grade values and continue increasing health and defense beyond former caps', () => {
   const tables = { atk: [1, 2, 3, 5], hp: [10, 20, 30, 50], def: [1, 2, 3, 5],
     spd: [.04, .08, .12, .2], crit: [2, 4, 6, 10], dodge: [2, 4, 6, 10] }
   for (const [id, amounts] of Object.entries(tables)) {
     assert.deepEqual(rules.upgradeQualities.map(q => progression.fixedAmounts[id][q.id]), amounts)
   }
-  const state = pendingReward(79, 60)
-  for (const option of rules.upgradeChoices(state)) {
-    if (['hp', 'def'].includes(option.id)) assert.ok(progression.units(state.progression)[option.id] < progression.fixedLimits[option.id])
-  }
   const growth = progression.fresh()
   for (let i = 0; i < 20; i++) for (const id of ['hp', 'def']) progression.add(growth, { id, quality: 'legendary' })
   const result = progression.apply({ maxHp: 210, atk: 20, def: 8, spd: 1, crit: 7, dodge: 6 }, growth)
-  assert.equal(result.maxHp, 410); assert.equal(result.def, 14)
+  assert.equal(result.maxHp, 1210); assert.equal(result.def, 108)
   const { growthCardRects } = require('../games/textbattle/layout.js')
   const view = layout({ width: 320, height: 568, top: 44, bottom: 34 })
   assert.equal(growthCardRects(view, 1)[0].y, view.growthCards[1].y)
   assert.equal(growthCardRects(view, 2)[0].y + 82, growthCardRects(view, 2)[1].y)
+})
+
+function grownState(counts, { quality = 'legendary', pending = true, version = 6 } = {}) {
+  const state = rules.initialState(79)
+  state.progression.version = version
+  for (const [id, count] of Object.entries(counts)) {
+    for (let i = 0; i < count; i++) progression.add(state.progression, { id, quality })
+  }
+  state.progression.pending = pending
+  state.round = progression.total(state.progression) + (pending ? 2 : 1); state.streak = state.round - 1
+  for (const side of ['player', 'enemy']) {
+    const actor = state[side]
+    actor.stats = rules.stats(actor.base, side === 'player' ? state.weapon : actor.weapon,
+      side === 'player' ? state.stance : 'strong', side === 'enemy', state.round, undefined, state.progression)
+    actor.hp = actor.stats.maxHp; actor.cooldown = 1000 / actor.stats.spd
+  }
+  return state
+}
+
+test('all six types remain available and grant full previews beyond former count and attribute ceilings', () => {
+  const state = grownState({ atk: 5, hp: 5, def: 5, spd: 25, crit: 25, dodge: 25 })
+  assert.ok(state.player.stats.spd > 4 && state.player.stats.crit > 100 && state.player.stats.dodge > 100)
+  assert.ok(rules.restore(state))
+  const offered = new Set()
+  for (let seed = 1; seed <= 60; seed++) {
+    const pending = rules.snapshot(state); pending.runId = seed
+    const before = { ...pending.player.stats }; const rng = pending.rng
+    const choices = rules.upgradeChoices(pending)
+    assert.equal(choices.length, 3)
+    assert.deepEqual(rules.upgradeChoices(rules.restore(pending)), choices)
+    for (const item of choices) {
+      offered.add(item.id)
+      const copy = rules.snapshot(pending); const key = item.id === 'hp' ? 'maxHp' : item.id
+      const preview = rules.upgradePreview(copy, item.id)
+      assert.ok(Math.abs(preview[key] - before[key] - item.amount) < 1e-10)
+      assert.ok(rules.chooseUpgrade(copy, item.id)); assert.deepEqual(copy.player.stats, preview)
+      assert.equal(copy.player.hp, preview.maxHp); assert.equal(copy.rng, rng)
+      assert.deepEqual(rules.restore(copy), copy)
+    }
+  }
+  assert.equal(offered.size, 6)
+})
+
+test('ordinary enemies retain uncapped attributes from the previous strong opponent across reloads', () => {
+  const state = grownState({ atk: 6, hp: 7, def: 6, spd: 25, crit: 25, dodge: 25 }, { pending: false })
+  assert.equal(state.round, 95)
+  const strong = { ...state.enemy.stats }
+  assert.ok(strong.spd > 4 && strong.crit > 100 && strong.dodge > 100)
+  victory(state); assert.ok(rules.nextRound(state))
+  assert.deepEqual(state.enemy.reference, strong)
+  for (const key of ['spd', 'crit', 'dodge']) {
+    assert.ok(Math.abs(state.enemy.stats[key] / strong[key] - 1) <= .08 + 1e-10)
+  }
+  assert.deepEqual(rules.restore(state), state)
+  const choice = rules.upgradeChoices(state)[0]; rules.chooseUpgrade(state, choice.id)
+  const restored = rules.restore(state); assert.ok(restored)
+  rules.startFight(restored); rules.startFight(state)
+  assert.deepEqual(rules.tick(restored, 3000), rules.tick(state, 3000))
+  assert.deepEqual(restored, state)
+})
+
+test('v5 capped saves resume live battles exactly and unlock existing rewards when preparing the next fight', () => {
+  const old = grownState({ hp: 8, def: 8, spd: 12, crit: 8, dodge: 8 }, { pending: false, version: 5 })
+  const source = rules.snapshot(old); const rng = old.rng
+  const prepared = rules.restore(source)
+  assert.equal(prepared.progression.version, 6)
+  assert.equal(prepared.player.stats.maxHp, old.player.base.maxHp + 400)
+  assert.equal(prepared.player.stats.def, old.player.stats.def - 6 + 40)
+  assert.ok(prepared.player.stats.crit > 60 && prepared.player.stats.dodge > 45)
+  assert.equal(prepared.rng, rng); assert.equal(prepared.player.hp, prepared.player.stats.maxHp)
+  assert.equal(source.progression.version, 5); assert.deepEqual(old, source)
+  assert.deepEqual(rules.restore(prepared), prepared)
+  rules.startFight(old); const saved = rules.snapshot(old)
+  const live = rules.restore(saved); assert.deepEqual(live, saved)
+  assert.deepEqual(rules.tick(live, 1500), rules.tick(old, 1500)); assert.deepEqual(live, old)
+  victory(live); rules.nextRound(live)
+  assert.equal(live.progression.version, 6); assert.ok(rules.restore(live))
+  const pending = grownState({ hp: 8, def: 8, spd: 12, crit: 8, dodge: 8 }, { version: 5 })
+  const upgraded = rules.restore(pending)
+  assert.equal(upgraded.progression.version, 6); assert.equal(upgraded.progression.pending, true)
+  assert.equal(rules.upgradeChoices(upgraded).length, 3)
 })
 test('frozen v9 saves resume exactly, retain earned bonuses and only add new fixed rewards after migration', () => {
   const fixture = require('./fixtures/textbattle-v9-growth.json')
@@ -103,15 +180,17 @@ test('frozen v9 saves resume exactly, retain earned bonuses and only add new fix
   assert.deepEqual(state, fixture); rules.tick(state, 3000)
   assert.deepEqual(state, require('./fixtures/textbattle-v9-growth-after.json'))
   const before = { ...state.player.stats }; victory(state); assert.ok(rules.nextRound(state))
-  assert.equal(state.combatVersion, 10); assert.equal(state.progression.version, 5)
-  assert.deepEqual(state.player.stats, before)
+  assert.equal(state.combatVersion, 18); assert.equal(state.progression.version, 6)
+  const currentSpeed = rules.stats(state.player.base, state.weapon, state.stance, null,
+    state.round, undefined, state.progression).spd
+  assert.deepEqual(state.player.stats, { ...before, spd: currentSpeed })
   assert.deepEqual(state.progression.legacy, { ...source.progression, pending: false })
   const choices = rules.upgradeChoices(state); const item = choices[0]
   const key = item.id === 'hp' ? 'maxHp' : item.id
   const expected = rules.upgradePreview(state, item.id); const rng = state.rng
   assert.ok(rules.chooseUpgrade(state, item.id)); assert.equal(state.rng, rng)
   assert.deepEqual(state.player.stats, expected)
-  assert.ok(Math.abs(state.player.stats[key] - before[key] - item.amount) < 1e-10)
+  assert.ok(Math.abs(state.player.stats[key] - (key === 'spd' ? currentSpeed : before[key]) - item.amount) < 1e-10)
   assert.ok(rules.restore(rules.snapshot(state)))
   for (const mutate of [s => { s.progression.legacy.counts.atk = 100 },
     s => { delete s.progression.legacy.counts }, s => { s.progression.legacy.pending = true },
@@ -162,12 +241,12 @@ test('victory offers three distinct, deterministic upgrades and blocks fighting 
   assert.deepEqual(rules.restore(rules.snapshot(state)), state)
   assert.equal(rules.startFight(state), true)
 })
-test('a hundred-round challenge never offers capped stats and receives exactly 99 upgrades', () => {
+test('a hundred-round challenge always offers three useful rewards and receives exactly 99 upgrades', () => {
   const state = rules.initialState(6)
   for (let round = 1; round < 100; round++) {
     victory(state); assert.ok(rules.nextRound(state))
     const choices = rules.upgradeChoices(state)
-    assert.ok(choices.length >= 1 && choices.length <= 3)
+    assert.equal(choices.length, 3)
     for (const item of choices) {
       const key = item.id === 'hp' ? 'maxHp' : item.id
       assert.ok(rules.upgradePreview(state, item.id)[key] > state.player.stats[key])
@@ -185,7 +264,7 @@ test('progression saves deeply copy data and reject extra, negative or duplicate
   const state = rules.initialState(28); victory(state); rules.nextRound(state)
   for (const corrupt of [s => { s.progression.pending = false }, s => { s.progression.counts.hp = 1 },
     s => { s.progression.counts.atk = -1 }, s => { s.progression.counts.spd = 13 },
-    s => { s.progression.version = 6 }, s => { s.progression.counts.def = NaN },
+    s => { s.progression.version = 7 }, s => { s.progression.counts.def = NaN },
     s => { s.status = 'fighting' }]) {
     const save = rules.snapshot(state); corrupt(save); assert.equal(rules.restore(save), null)
   }
@@ -301,15 +380,14 @@ test('legendary natural odds grow monotonically, retain the standard ratio and s
   assert.equal(rules.upgradeOdds({ streak: 100 }).qualities[3].probability, 3)
 })
 
-test('strong-enemy rewards guarantee legendary with capped types excluded and cannot reroll or claim twice', () => {
+test('strong-enemy rewards guarantee legendary without excluding repeated types and cannot reroll or claim twice', () => {
   const slots = new Set()
   for (const streak of [5, 10, 95]) for (let seed = 1; seed <= 120; seed++) {
     const state = pendingReward(seed, streak)
     const before = rules.snapshot(state); const options = rules.upgradeChoices(state)
     const index = options.findIndex(item => item.quality === 'legendary')
     assert.ok(index >= 0, `${streak}/${seed}`); slots.add(index)
-    assert.ok(options.length >= 1 && options.length <= 3); assert.equal(new Set(options.map(item => item.id)).size, options.length)
-    for (const item of options) assert.ok(state.progression.counts[item.id] < rules.upgrades.find(upgrade => upgrade.id === item.id).cap)
+    assert.equal(options.length, 3); assert.equal(new Set(options.map(item => item.id)).size, 3)
     assert.deepEqual(rules.upgradeChoices(rules.restore(before)), options)
     assert.deepEqual(state, before)
     const expected = rules.upgradePreview(state, options[index].id)
@@ -317,7 +395,6 @@ test('strong-enemy rewards guarantee legendary with capped types excluded and ca
     assert.deepEqual(state.player.stats, expected); assert.equal(state.rng, before.rng)
     assert.equal(rules.chooseUpgrade(state, options[index].id), false)
     assert.ok(rules.restore(rules.snapshot(state)))
-    if (streak === 95) assert.ok(options.every(item => !['spd', 'crit', 'dodge'].includes(item.id)))
   }
   assert.equal(slots.size, 3, 'the guarantee must not always occupy the same card')
   for (const streak of [1, 4, 6, 99]) {
@@ -364,7 +441,7 @@ test('all 24 upgrade variants grant the advertised bonus, keep health full and s
   }
 })
 
-test('quality totals, snapshot isolation, capped attributes and owned icon breakdown stay consistent', () => {
+test('quality totals, snapshot isolation, uncapped attributes and owned icon breakdown stay consistent', () => {
   const state = rules.initialState(28); victory(state); rules.nextRound(state)
   for (const corrupt of [s => { s.progression.qualities.fine.hp = 1 }, s => { s.progression.qualities.epic.atk = -1 },
     s => { s.progression.qualities.normal = null }, s => { delete s.progression.qualities.epic },
@@ -381,18 +458,18 @@ test('quality totals, snapshot isolation, capped attributes and owned icon break
   assert.deepEqual(owned.breakdown, [1, 1, 1, 1]); assert.equal(owned.quality, 'legendary'); assert.equal(owned.count, 4)
   for (let i = 0; i < 8; i++) for (const id of ['spd', 'dodge']) progression.add(growth, { id, quality: 'epic' })
   const stats = progression.apply({ maxHp: 210, atk: 25, def: 15, spd: 3, crit: 55, dodge: 40 }, growth)
-  assert.ok(Math.abs(stats.spd - 3.96) < 1e-10); assert.equal(stats.crit, 60); assert.equal(stats.dodge, 45)
+  assert.ok(Math.abs(stats.spd - 3.96) < 1e-10); assert.equal(stats.crit, 77); assert.equal(stats.dodge, 88)
 })
 
-test('fixed growth grants identical attack bonuses across weapons and caps defense while retaining stance differences', () => {
+test('fixed growth grants full bonuses across weapons and retains stance differences without stat ceilings', () => {
   const base = { maxHp: 210, atk: 20, def: 10, spd: 1.2, crit: 20, dodge: 12 }
   const growth = progression.fresh()
   for (let i = 0; i < 20; i++) for (const id of ['atk', 'def']) progression.add(growth, { id, quality: 'normal' })
   const strong = rules.stats(base, 'sword', 'strong', null, 41, undefined, growth)
   const guard = rules.stats(base, 'sword', 'guard', null, 41, undefined, growth)
   assert.ok(strong.atk > guard.atk)
-  assert.equal(guard.def, Math.round(base.def * 1.6) + 6)
-  assert.equal(strong.def, Math.round(base.def * .75) + 6)
+  assert.equal(guard.def, Math.round(base.def * 1.6) + 20)
+  assert.equal(strong.def, Math.round(base.def * .75) + 20)
   assert.equal(strong.maxHp, guard.maxHp)
   const extraOutput = weapon => {
     const before = rules.stats(base, weapon, 'strong', null)
@@ -401,12 +478,12 @@ test('fixed growth grants identical attack bonuses across weapons and caps defen
   }
   assert.equal(extraOutput('dual'), extraOutput('saber'))
   const maxGrowth = progression.fresh()
-  for (const id of ['spd', 'crit', 'dodge']) for (let i = 0; i < rules.upgrades.find(item => item.id === id).cap; i++) {
+  for (const id of ['spd', 'crit', 'dodge']) for (let i = 0; i < 30; i++) {
     progression.add(maxGrowth, { id, quality: 'epic' })
   }
   for (const weapon of rules.weapons) for (const stance of rules.stances) {
     const actor = rules.stats(base, weapon.id, stance.id, null, 1, undefined, maxGrowth)
-    assert.ok(actor.spd <= 4); assert.ok(actor.crit <= 60); assert.ok(actor.dodge <= 45)
+    assert.ok(actor.spd > 4); assert.ok(actor.crit > 100); assert.ok(actor.dodge > 100)
   }
 })
 
@@ -418,14 +495,14 @@ test('saved v5 quality battles keep old equipment, stance, cooldowns and RNG unt
   assert.deepEqual(rules.tick(restored, 1000), rules.tick(control, 1000))
   assert.deepEqual(restored, control); assert.ok(rules.restore(rules.snapshot(restored)))
   victory(restored); rules.nextRound(restored)
-  assert.equal(restored.combatVersion, 10)
+  assert.equal(restored.combatVersion, 18)
   assert.deepEqual(restored.progression.counts, fixture.progression.counts)
   for (const id of ['normal', 'fine', 'epic']) assert.deepEqual(restored.progression.qualities[id], fixture.progression.qualities[id])
   assert.ok(Object.values(restored.progression.qualities.legendary).every(count => count === 0))
   assert.ok(restored.progression.pending)
   assert.ok(rules.restore(rules.snapshot(restored)))
   assert.deepEqual(fixture, source)
-  const corrupt = rules.snapshot(restored); corrupt.combatVersion = 11
+  const corrupt = rules.snapshot(restored); corrupt.combatVersion = 19
   assert.equal(rules.restore(corrupt), null)
   for (const status of ['prepare', 'won', 'lost']) {
     const save = structuredClone(fixture)
@@ -461,7 +538,7 @@ test('pending three-quality rewards keep their old distribution, then enable leg
   assert.equal(pending.progression.version, 2); assert.ok(rules.restore(pending))
   const counts = { ...pending.progression.counts }
   victory(pending); rules.nextRound(pending)
-  assert.equal(pending.progression.version, 5)
+  assert.equal(pending.progression.version, 6)
   assert.deepEqual(pending.progression.counts, counts)
   assert.ok(Object.values(pending.progression.qualities.legendary).every(count => count === 0))
   assert.ok(rules.restore(pending))
@@ -492,7 +569,7 @@ test('original single-quality v5 saves preserve agile stats and pending rewards 
     rules.stats(pending.player.base, pending.weapon, 'agile', null, pending.round, undefined, pending.progression, 4).spd)
   assert.ok(rules.restore(rules.snapshot(pending)))
   victory(restored); rules.nextRound(restored)
-  assert.equal(restored.combatVersion, 10); assert.equal(restored.progression.version, 5)
+  assert.equal(restored.combatVersion, 18); assert.equal(restored.progression.version, 6)
   assert.deepEqual(restored.progression.qualities.normal, fixture.progression.counts)
   assert.ok(rules.restore(rules.snapshot(restored)))
 })
@@ -509,10 +586,10 @@ test('pre-quality growth saves keep exact stats, RNG and pending rewards until t
   assert.deepEqual(restored, state)
   assert.deepEqual(rules.tick(restored, 1000), rules.tick(state, 1000))
   victory(restored); rules.nextRound(restored)
-  assert.equal(restored.progression.version, 5)
+  assert.equal(restored.progression.version, 6)
   assert.deepEqual(restored.progression.qualities.normal, state.progression.counts)
   assert.deepEqual(restored.player.stats, rules.stats(restored.player.base, restored.weapon, restored.stance,
-    null, restored.round, undefined, restored.progression, 10))
+    null, restored.round, undefined, restored.progression, 18))
   assert.equal(restored.player.stats.def, Math.round((state.player.base.def + 2) * 1.6))
   assert.ok(rules.restore(rules.snapshot(restored)))
   const pending = rules.snapshot(state)

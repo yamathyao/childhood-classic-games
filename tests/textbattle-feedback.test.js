@@ -77,6 +77,22 @@ test('momentum display eases independently and spent skills cannot leave a stale
   assert.equal(state.player.combat.momentum, 2300)
 })
 
+test('reflection labels appear on the original attacker while dual followups keep the skill announcement', () => {
+  const state = rules.initialState(42); rules.startFight(state)
+  const feedback = createFeedback(state, 1000)
+  recordEvents(feedback, state, [{ side: 'enemy', damage: 20, reflected: 16, time: 0 }], 1000)
+  const screen = { width: 320, height: 568, top: 24, bottom: 16 }
+  const reflected = labels(feedback.effects, screen).drawn
+  assert.ok(reflected.some(item => item.text === '反伤'))
+  assert.ok(reflected.some(item => item.text === '−16'))
+  assert.ok(reflected.some(item => item.text === '−20'))
+  const dual = labels([
+    { side: 'player', damage: 15, skill: 'dual-flurry', at: 1000 },
+    { side: 'player', damage: 16, followup: true, at: 1000 }
+  ], screen).drawn
+  assert.deepEqual(dual.map(item => item.text), ['双袭 · 发动', '追击', '−16'])
+})
+
 test('feedback discards stale catch-up hits, caps effects and never changes combat or save data', () => {
   const state = rules.initialState(42); rules.startFight(state)
   state.elapsedMs = 5000

@@ -38,7 +38,7 @@ function verify(samples = 10) {
     for (const weapon of rules.weapons) for (let seed = 1; seed <= samples; seed++) {
       const runSeed = Math.imul(seed, 2654435761) >>> 0
       const training = rules.initialState(runSeed)
-      training.progression.version = combatVersion === 9 ? 4 : 5
+      training.progression.version = combatVersion === 9 ? 4 : 6
       if (combatVersion === 9) {
         const allocation = { rng: runSeed }; rules.nickname(allocation)
         const playerBase = oldBase(allocation)
@@ -82,7 +82,7 @@ function verify(samples = 10) {
             assert.equal(allocation.rng, training.rng)
             training.enemy.base = enemyBase
           }
-          training.progression.version = combatVersion === 9 ? 4 : 5
+          training.progression.version = combatVersion === 9 ? 4 : 6
           if (combatVersion === 9) delete training.progression.legacy
           refresh(training)
           choose(training, priorities, route === 'quality')

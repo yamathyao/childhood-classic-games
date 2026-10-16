@@ -23,10 +23,16 @@ const subtractiveWeapons = multiplicativeWeapons.map(item => ({ ...item,
 const simpleWeapons = subtractiveWeapons.map(item => ({ ...item, pierce: 0,
   atk: ({ spear: 1.3, axe: 1.44, halberd: 1.32 })[item.id] || item.atk,
   note: ({ spear: '长杆 · 贯击', axe: '重击 · 裂甲', halberd: '威力 · 护身' })[item.id] || item.note }))
-const weapons = simpleWeapons.map(item => ({ ...item,
+const skillWeapons = simpleWeapons.map(item => ({ ...item,
   atk: ({ sword: 1.18, saber: 1.42, dual: .98, axe: 1.40 })[item.id] || item.atk,
   crit: ({ sword: 1, saber: 2, spear: .5, halberd: 1 })[item.id] || 0,
   dodge: item.id === 'dual' ? 1 : 0 }))
+const v12Weapons = skillWeapons.map(item => ({ ...item, spd: item.id === 'axe' ? .9 : item.spd }))
+const v14Weapons = v12Weapons.map(item => ({ ...item, spd: item.id === 'saber' ? .9 : item.spd }))
+const v15Weapons = v14Weapons.map(item => ({ ...item,
+  spd: item.id === 'dual' ? 1.36 : item.id === 'saber' ? .895 : item.spd }))
+const v16Weapons = v15Weapons.map(item => ({ ...item, spd: item.id === 'dual' ? 1.3 : item.spd }))
+const weapons = v16Weapons.map(item => ({ ...item, spd: item.id === 'dual' ? 1.32 : item.spd }))
 // Only used to validate old saves before migrating their equipment stats.
 const legacyWeapons = [
   { id: 'sword', atk: 1.42, spd: .82, crit: 3, dodge: 0, pierce: 0 },
@@ -53,7 +59,7 @@ function stanceCatalog(combatVersion, growthVersion = 2) {
   // combat version 5. Keep their original stance while the battle resumes.
   return combatVersion === 5 && growthVersion >= 2 ? previousStances : previousStances.map(item => item.id === 'agile' ? { ...item, atk: .9, spd: 1.18 } : item)
 }
-const weaponCatalog = combatVersion => combatVersion >= 9 ? weapons : combatVersion === 8 ? simpleWeapons : combatVersion === 7 ? subtractiveWeapons : combatVersion === 6 ? multiplicativeWeapons : previousWeapons
+const weaponCatalog = combatVersion => combatVersion >= 17 ? weapons : combatVersion >= 16 ? v16Weapons : combatVersion >= 15 ? v15Weapons : combatVersion >= 14 ? v14Weapons : combatVersion >= 12 ? v12Weapons : combatVersion >= 9 ? skillWeapons : combatVersion === 8 ? simpleWeapons : combatVersion === 7 ? subtractiveWeapons : combatVersion === 6 ? multiplicativeWeapons : previousWeapons
 // Used solely to validate and resume older saved battles.
 const legacyEnemies = [
   { id: 'duelist', name: '流浪刀客', note: '均衡出招，擅长暴击', weapon: 'saber', atk: 1, def: 1, hp: 1, spd: 1, dodge: 0 },
@@ -87,7 +93,7 @@ function rollBase(state) {
   return { maxHp: Math.round(150 + points[0] * 3), atk: Math.round(10 + points[1] * .4),
     def: Math.round(2 + points[2] * (state.combatVersion >= 7 ? .25 : .35)), ...rates }
 }
-function stats(base, weaponId, stanceId, kind, round = 1, catalog, growthState, combatVersion = 10) {
+function stats(base, weaponId, stanceId, kind, round = 1, catalog, growthState, combatVersion = 18) {
   catalog = catalog || weaponCatalog(combatVersion)
   const weapon = find(catalog, weaponId)
   const stance = find(stanceCatalog(combatVersion, growthState ? growthState.version : 1), stanceId)
@@ -159,12 +165,13 @@ function enemyStats(state, enemy) {
   for (const key of ['maxHp', 'atk', 'def', 'spd', 'crit', 'dodge']) {
     const factor = Math.max(.92, Math.min(1.08, enemy.base[key] / state.player.base[key]))
     const value = enemy.reference[key] * factor
-    attributes[key] = ['maxHp', 'atk', 'def'].includes(key) ? Math.round(value) : Math.min(({ spd: 4, crit: 60, dodge: 45 })[key], value)
+    attributes[key] = ['maxHp', 'atk', 'def'].includes(key) ? Math.round(value)
+      : state.progression && state.progression.version >= 6 ? value : Math.min(({ spd: 4, crit: 60, dodge: 45 })[key], value)
   }
   return attributes
 }
 function initialState(seed = Date.now()) {
-  const state = { version: 5, combatVersion: 10, runId: (seed >>> 0) || 1, rng: (seed >>> 0) || 1, round: 1, streak: 0, status: 'prepare',
+  const state = { version: 5, combatVersion: 18, runId: (seed >>> 0) || 1, rng: (seed >>> 0) || 1, round: 1, streak: 0, status: 'prepare',
     weapon: 'saber', stance: 'guard', elapsedMs: 0, logs: [], progression: progression.fresh(), report: report.fresh() }
   state.player = { name: nickname(state), gender: 'male', base: rollBase(state) }
   refreshPlayer(state); makeEnemy(state); strategy.resetCombat(state)
@@ -190,6 +197,10 @@ function reroll(state) {
 function startFight(state) {
   if (state.status !== 'prepare' || (state.progression && state.progression.pending)) return false
   state.combatVersion = Math.max(5, state.combatVersion); delete state.skill
+  if (state.combatVersion >= 10 && state.combatVersion < 18) {
+    state.combatVersion = 18
+    refreshPlayer(state); refreshEnemy(state)
+  }
   state.status = 'fighting'; state.logs = []; state.elapsedMs = 0
   strategy.resetCombat(state); state.report = report.fresh()
   return true
@@ -205,7 +216,7 @@ function nextRound(state) {
     // Reuse the old allocation without rerolling the character or combat RNG.
     state.player.base = { ...base, ...startingRates((base.crit - 3) / .8, (base.dodge - 2) / .6, (base.spd - .8) / .022) }
   }
-  state.combatVersion = 10; delete state.skill
+  state.combatVersion = 18; delete state.skill
   refreshPlayer(state); makeEnemy(state); strategy.resetCombat(state); return true
 }
 function chooseUpgrade(state, id) {
@@ -224,18 +235,22 @@ function upgradePreview(state, id) {
   const growth = progression.copy(state.progression); progression.add(growth, item)
   return stats(state.player.base, state.weapon, state.stance, null, state.round, undefined, growth, state.combatVersion)
 }
-function attack(state, side) {
+function attack(state, side, followup = false) {
   const attacker = state[side]; const defender = state[side === 'player' ? 'enemy' : 'player']
-  const tactical = state.combatVersion >= 2 ? strategy.modifiers(state, side) : null
+  // A second blade uses normal damage and independent rolls, without another
+  // skill release, attack timer or momentum expenditure.
+  const tactical = state.combatVersion >= 2 ? strategy.modifiers(state, side, followup) : null
   const dodged = random(state) * 100 < (tactical ? tactical.dodge : defender.stats.dodge)
-  const critical = !dodged && random(state) * 100 < attacker.stats.crit
+  const criticalRoll = !dodged && random(state) * 100 < attacker.stats.crit
+  const critical = !dodged && (criticalRoll || !!(tactical && tactical.guaranteedCritical))
   let rolledDamage = 0
   if (!dodged) {
     if (state.combatVersion >= 7) {
       const attackValue = attacker.stats.atk * (critical ? 1.8 : 1) * (tactical ? tactical.scale : 1)
       const defense = state.combatVersion >= 8 ? (tactical && tactical.ignoreDefense ? 0 : defender.stats.def) :
         defender.stats.def * (1 - tactical.pierce)
-      rolledDamage = Math.max(1, Math.round((attackValue - defense) * (tactical && tactical.guarded ? .75 : 1)))
+      rolledDamage = Math.max(1, Math.round((attackValue - defense) *
+        (state.combatVersion < 18 && tactical && tactical.guarded ? .75 : 1)))
     } else {
       // Saved battles retain their defense curve and random-number consumption.
       const armor = defender.stats.def * (1 - (tactical ? tactical.pierce : attacker.stats.pierce))
@@ -243,11 +258,25 @@ function attack(state, side) {
         (critical ? 1.8 : 1) * (.9 + random(state) * .2) * (tactical ? tactical.scale : 1)))
     }
   }
+  if (!dodged && tactical && tactical.blocked) rolledDamage = 0
+  if (!dodged && tactical && tactical.damageScale !== undefined) {
+    rolledDamage = Math.max(1, Math.round(rolledDamage * tactical.damageScale))
+  }
   // Overkill cannot contribute charge; older active battles retain their logs.
   const damage = state.combatVersion >= 5 ? Math.min(defender.hp, rolledDamage) : rolledDamage
   const actualDamage = Math.min(defender.hp, damage)
   defender.hp = Math.max(0, defender.hp - damage)
   const event = { side, damage, critical, dodged, time: Math.round(state.elapsedMs) }
+  if (followup) event.followup = true
+  if (state.combatVersion >= 11 && !dodged && defender.combat.reflect) {
+    delete defender.combat.reflect
+    // Reflection does not mitigate the incoming hit, recurse, or generate
+    // momentum. A lethal incoming blow ends the fight before retaliation.
+    if (defender.hp > 0 && damage > 0) {
+      const reflected = Math.min(attacker.hp, defender.stats.atk, Math.round(damage * .8))
+      if (reflected > 0) { event.reflected = reflected; attacker.hp -= reflected }
+    }
+  }
   if (tactical) {
     if (tactical.skill) event.skill = tactical.skill
     if (tactical.trait) event.trait = tactical.trait
@@ -258,12 +287,14 @@ function attack(state, side) {
   report.record(state.report, event, actualDamage)
   state.logs.push(event)
   if (state.logs.length > 80) state.logs.shift()
-  attacker.cooldown += 1000 / attacker.stats.spd
-  if (defender.hp === 0) {
-    state.status = side === 'player' ? 'won' : 'lost'
-    if (side === 'player') state.streak++
+  if (!followup) attacker.cooldown += 1000 / attacker.stats.spd
+  if (defender.hp === 0 || attacker.hp === 0) {
+    state.status = state.enemy.hp === 0 ? 'won' : 'lost'
+    if (state.status === 'won') state.streak++
   }
-  return event
+  const events = [event]
+  if (tactical && tactical.doubleStrike && state.status === 'fighting') events.push(...attack(state, side, true))
+  return events
 }
 function tick(state, milliseconds) {
   if (state.status !== 'fighting' || !Number.isFinite(milliseconds) || milliseconds <= 0) return []
@@ -278,8 +309,8 @@ function tick(state, milliseconds) {
     if (delay > delta + 1e-7) break
     const both = state.player.cooldown < 1e-7 && state.enemy.cooldown < 1e-7
     const first = both ? (random(state) < .5 ? 'player' : 'enemy') : state.player.cooldown < 1e-7 ? 'player' : 'enemy'
-    events.push(attack(state, first))
-    if (both && state.status === 'fighting') events.push(attack(state, first === 'player' ? 'enemy' : 'player'))
+    events.push(...attack(state, first))
+    if (both && state.status === 'fighting') events.push(...attack(state, first === 'player' ? 'enemy' : 'player'))
     if (remaining <= 1e-7) break
   }
   return events
@@ -311,9 +342,10 @@ function restore(value) {
   const modern = value.version === 5 && value.combatVersion >= 4
   if (value.enemy.reference !== undefined && (value.combatVersion < 10 || value.round <= 5 || value.round % 5 === 0 ||
     !value.enemy.reference || !['maxHp', 'atk', 'def', 'spd', 'crit', 'dodge'].every(key =>
-      finite(value.enemy.reference[key], key === 'def' ? 0 : .01, ({ spd: 4, crit: 60, dodge: 45 })[key] || 100000)) ||
+      finite(value.enemy.reference[key], key === 'def' ? 0 : .01, value.progression && value.progression.version >= 6
+        ? Number.MAX_SAFE_INTEGER : ({ spd: 4, crit: 60, dodge: 45 })[key] || 100000)) ||
     value.enemy.reference.pierce !== 0)) return null
-  if (value.progression && value.progression.version === 5 && value.combatVersion < 10) return null
+  if (value.progression && value.progression.version >= 5 && value.combatVersion < 10) return null
   if (value.progression !== undefined && (!modern || !progression.valid(value.progression, value))) return null
   if (value.report !== undefined && (!report.valid(value.report) || (value.status === 'prepare' &&
     ['player', 'enemy'].some(side => value.report[side].attacks !== 0 || value.report[side].damage !== 0)))) return null
@@ -324,13 +356,16 @@ function restore(value) {
     if (!legacyEnemy || normalizeWeapon(value.enemy.weapon) !== legacyEnemy.weapon ||
       !(value.enemy.name === legacyEnemy.name || (value.version === 5 && enemyNaming.valid(value.enemy.name)))) return null
   }
-  if (value.version >= 3 && (!(value.version === 3 ? [1, 2] : value.version === 4 ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).includes(value.combatVersion) ||
+  if (value.version >= 3 && (!(value.version === 3 ? [1, 2] : value.version === 4 ? [1, 2, 3] : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]).includes(value.combatVersion) ||
     (value.combatVersion < 3 ? !strategy.legacySkills.some(item => item.id === value.skill) : value.skill !== undefined) ||
     !strategy.validCombat(value.player.combat, value.combatVersion) || !strategy.validCombat(value.enemy.combat, value.combatVersion))) return null
   if (value.combatVersion >= 5 && value.status === 'prepare' &&
-    ['player', 'enemy'].some(side => value[side].combat.momentum !== 0 || value[side].combat.attacks !== 0 || value[side].combat.hitsTaken !== 0 || value[side].combat.ward)) return null
+    ['player', 'enemy'].some(side => value[side].combat.momentum !== 0 || value[side].combat.attacks !== 0 || value[side].combat.hitsTaken !== 0 || value[side].combat.ward || value[side].combat.reflect || value[side].combat.guaranteedCritical)) return null
   for (const side of ['player', 'enemy']) {
     const actor = value[side]
+    const actorWeapon = side === 'player' ? value.weapon : actor.weapon
+    if (actor.combat && ((actor.combat.reflect && actorWeapon !== 'sword') ||
+      (actor.combat.guaranteedCritical && actorWeapon !== 'axe'))) return null
     if (!find(catalog, side === 'player' ? value.weapon : actor.weapon)) return null
     if (actor.gender !== undefined && !['male', 'female'].includes(actor.gender)) return null
     const enemyContext = side === 'enemy' ? (modern ? true : actor.kind) : null
@@ -377,6 +412,14 @@ function restore(value) {
     restored.enemy.stats = stats(restored.enemy.base, restored.enemy.weapon, 'strong', true, restored.round, undefined, restored.progression, 5)
     restored.enemy.hp = restored.enemy.stats.maxHp; restored.enemy.cooldown = 1000 / restored.enemy.stats.spd
     strategy.resetCombat(restored)
+  }
+  if (restored.status === 'prepare' && restored.progression && restored.progression.version === 5) {
+    restored.progression = progression.promote(restored.progression)
+    refreshPlayer(restored); refreshEnemy(restored)
+  }
+  if (restored.status === 'prepare' && restored.combatVersion >= 10 && restored.combatVersion < 18) {
+    restored.combatVersion = 18
+    refreshPlayer(restored); refreshEnemy(restored)
   }
   return restored
 }
