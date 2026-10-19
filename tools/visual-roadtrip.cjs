@@ -113,7 +113,7 @@ async function main() {
       await screenshot(`camera-capture-${width}.png`)
       await page.evaluate(() => {
         const exit = RoadRoute.exitAt(0)
-        Object.assign(roadState, { distance: exit.start - 10, lane: 3, targetLane: 3, speed: 15 })
+        Object.assign(roadState, { distance: exit.start - 75, lane: 2, targetLane: 2, speed: 15 })
         roadState.traffic = []
       })
       await page.waitForFunction(() => !document.querySelector('#exit-button').hidden)

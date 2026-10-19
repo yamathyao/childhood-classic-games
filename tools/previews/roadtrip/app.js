@@ -8,7 +8,7 @@
   let state = rules.create(settings)
   let input = { left: false, right: false, accelerate: false, brake: false }
   const keys = new Set(); const pointers = new Map(); const activeKeys = new Set()
-  let frame = 0; let last = 0; let lastUi = 0; let soundEnabled = false; let audio = null
+  let frame = 0; let last = 0; let nextFrame = 0; let lastUi = 0; let soundEnabled = false; let audio = null
   let lastNotice = ''; let displayVersion = ''
 
   function clearInput() {
@@ -27,6 +27,8 @@
   function updateAudio() {
     if (!audio) return
     const running = state.status === 'running' && soundEnabled && !document.hidden
+    if (!running) { if (audio.context.state === 'running') audio.context.suspend().catch(() => {}); return }
+    if (audio.context.state === 'suspended') audio.context.resume().catch(() => {})
     const now = audio.context.currentTime
     audio.gain.gain.setTargetAtTime(running ? .024 + (input.accelerate ? .014 : 0) : 0, now, .12)
     audio.oscillator.frequency.setTargetAtTime(40 + state.speed * 1.25, now, .15)
@@ -44,7 +46,6 @@
         audio = { context, oscillator, gain, filter }
       } catch { $('#sound').disabled = true; return }
     }
-    audio.context.resume().catch(() => {})
     soundEnabled = !soundEnabled
     $('#sound').setAttribute('aria-label', soundEnabled ? '关闭声音' : '开启声音')
     $('#sound').title = soundEnabled ? '关闭声音' : '开启声音'
@@ -108,7 +109,7 @@
     $('#exit-button').hidden = !available
     $('#exit-button').disabled = status !== 'running'
     $('#exit-button').setAttribute('aria-pressed', state.exitRequested)
-    $('#exit-button').textContent = state.exitRequested ? '取消驶出 ×' : '驶出结算 ↗'
+    $('#exit-button').textContent = state.exitRequested ? '取消辅助靠右 ×' : '辅助靠右驶出 ↗'
     $('#next-exit').textContent = state.phase === 'exiting' ? '驶出后结束并结算' : state.phase === 'arrived' ? '本程结束 · 已结算' : state.exitRequested ? (state.mode === 'manual' ? '请驶入最右侧车道 →' : '向右并道，准备结算 →') : available ? `结算出口 · ${Math.max(0, Math.ceil(exit.remaining / 10) * 10)} m` : `下个结算出口 ${(Math.max(0, exit.remaining) / 1000).toFixed(1)} km`
     const camera = RoadRoute.cameraAt(state.distance)
     const cameraAlert = $('#camera-alert')
@@ -133,29 +134,32 @@
 
   function draw() { renderer.render(canvas, state, input); updateUi(true) }
 
-  function loop(now) {
+  function queueFrame() { frame = setTimeout(loop, Math.max(1, Math.ceil(nextFrame - performance.now()))) }
+  function loop() {
     frame = 0
-    if (state.status !== 'running') return
-    const delta = last ? Math.min((now - last) / 1000, .05) : 1 / 60
+    if (state.status !== 'running' || document.hidden) return
+    const now = performance.now()
+    const delta = last ? Math.min((now - last) / 1000, .1) : 1 / 30
     last = now
+    nextFrame = nextFrame && now - nextFrame < 1000 / 30 ? nextFrame + 1000 / 30 : now + 1000 / 30
     rules.step(state, input, delta)
     renderer.render(canvas, state, input)
     if (now - lastUi > 80 || state.status !== 'running') { updateUi(); updateAudio(); lastUi = now }
-    if (state.status === 'running') frame = requestAnimationFrame(loop)
+    if (state.status === 'running') queueFrame()
     else { clearInput(); updateUi(true) }
   }
 
   function schedule() {
-    if (!frame && state.status === 'running' && !document.hidden) { last = 0; frame = requestAnimationFrame(loop) }
+    if (!frame && state.status === 'running' && !document.hidden) { last = performance.now(); nextFrame = last + 1000 / 30; queueFrame() }
   }
 
   function pause() {
     if (state.status !== 'running') return
-    state.status = 'paused'; cancelAnimationFrame(frame); frame = 0; clearInput(); draw()
+    state.status = 'paused'; clearTimeout(frame); frame = 0; clearInput(); draw()
   }
 
   function reset(run = false) {
-    cancelAnimationFrame(frame); frame = 0; clearInput()
+    clearTimeout(frame); frame = 0; clearInput()
     state = rules.create(settings); lastNotice = ''; $('#message').textContent = ''
     if (run) rules.start(state)
     draw(); schedule(); updateAudio()

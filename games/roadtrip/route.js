@@ -16,8 +16,11 @@
     { start: 300, end: 400, from: 4, to: 3 },
     { start: 650, end: 760, from: 3, to: 2 },
     { start: 1000, end: 1100, from: 2, to: 3 },
-    { start: 1240, end: 1340, from: 3, to: 4 }
+    { start: 1240, end: 1340, from: 3, to: 4 },
+    { start: 1400, end: 1500, from: 4, to: 3 }
   ]
+  const laterChanges = [{ start: 0, end: 35, from: 3, to: 2, exit: true },
+    { start: 110, end: 190, from: 2, to: 4 }, ...changes]
   const bends = [[0, 0], [150, 0], [330, 120], [550, -100], [820, 105], [1050, -110], [1260, 65], [1460, 0], [1600, 0]]
 
   function position(distance) { return ((distance % PERIOD) + PERIOD) % PERIOD }
@@ -34,8 +37,8 @@
 
   function sample(distance) {
     const p = distance < 0 ? 0 : position(distance)
-    let width = LANE * 4; let lanes = 4; let transition = null
-    for (const item of changes) {
+    let lanes = distance >= PERIOD ? 3 : 4; let width = LANE * lanes; let transition = null
+    for (const item of distance >= PERIOD ? laterChanges : changes) {
       if (p >= item.end) { width = item.to * LANE; lanes = item.to }
       else if (p >= item.start) {
         width = (item.from + (item.to - item.from) * smooth((p - item.start) / (item.end - item.start))) * LANE
@@ -53,17 +56,17 @@
 
   function nextChange(distance) {
     const base = Math.floor(Math.max(0, distance) / PERIOD) * PERIOD
-    for (const item of changes) {
+    for (const item of distance >= PERIOD ? laterChanges : changes) {
       if (base + item.end > distance) return { ...item, start: base + item.start, end: base + item.end, remaining: base + item.start - distance }
     }
-    const first = changes[0]
+    const first = laterChanges[0]
     return { ...first, start: base + PERIOD + first.start, end: base + PERIOD + first.end, remaining: base + PERIOD + first.start - distance }
   }
 
   function exitAt(distance) {
     const index = Math.max(1, Math.ceil((distance - 110) / EXIT_INTERVAL))
     const start = index * EXIT_INTERVAL
-    return { start, end: start + 110, decisionEnd: start + 35, remaining: start - distance }
+    return { start, end: start + 110, decisionEnd: start + 35, lane: 2, remaining: start - distance }
   }
 
   function cameraAt(distance) {
@@ -73,13 +76,16 @@
   }
 
   function exitX(distance, exit) {
-    const main = sample(distance)
-    return main.right - LANE / 2 + 270 * smooth((distance - exit.start) / (exit.end - exit.start))
+    return laneX(exit.start, 2) + 270 * smooth((distance - exit.start) / (exit.end - exit.start))
   }
 
   function warning(distance, phase) {
     if (phase === 'entering') return { kind: 'entry', title: '右侧匝道汇入', detail: '自动汇入，主路车辆优先', meters: Math.max(0, ENTRY_END - distance) }
     if (phase === 'exiting') return { kind: 'exit', title: '正在驶离主路', detail: '沿右侧匝道减速驶出', meters: 0 }
+    const exit = exitAt(distance)
+    if (exit.remaining <= 220 && distance <= exit.decisionEnd) return {
+      kind: 'exit', title: '三车道 · 最右道直接驶出 ↗', detail: '继续行驶请走左侧两道', meters: Math.max(0, exit.remaining)
+    }
     const change = nextChange(distance)
     if (change.to < change.from && change.remaining <= 180) return {
       kind: 'narrow', title: `${change.from} → ${change.to} 车道 · 向左并道`,

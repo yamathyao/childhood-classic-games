@@ -3,11 +3,22 @@
   else root.RoadArt = factory(root.RoadRules, root.RoadRoute, root.RoadScenery)
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (RoadRules, RoadRoute, scenery) {
   'use strict'
-  const { CARS } = RoadRules
+  const { CARS, CAR_SIZES: sizes, vehiclePose } = RoadRules
   const LANE = 84
   const route = RoadRoute
   const METERS = 8
-  const sizes = [[42, 65], [43, 73], [47, 77], [44, 75], [44, 71], [45, 82]]
+  let roadCache = null
+  const sprites = new Map()
+  function surface(width, height) {
+    if (typeof wx !== 'undefined' && wx.createOffscreenCanvas) return wx.createOffscreenCanvas({ type: '2d', width, height })
+    if (typeof document !== 'undefined') { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; return canvas }
+    return null
+  }
+  function releaseCaches() {
+    if (roadCache && roadCache.canvas) { roadCache.canvas.width = 1; roadCache.canvas.height = 1 }
+    for (const canvas of sprites.values()) if (canvas) { canvas.width = 1; canvas.height = 1 }
+    roadCache = null; sprites.clear()
+  }
 
   function rect(ctx, x, y, w, h, color, radius = 0) {
     ctx.fillStyle = color
@@ -34,6 +45,25 @@
   }
 
   function drawCar(ctx, model, x, y, options = {}) {
+    if (typeof ctx.drawImage === 'function') {
+      const key = model * 4 + (options.braking ? 2 : 0) + (options.player ? 1 : 0)
+      try {
+        if (!sprites.has(key)) {
+          const canvas = surface(88, 140)
+          if (canvas) { const c = canvas.getContext('2d'); c.translate(44, 60); drawCarVector(c, model, 0, 0, { ...options, angle: 0 }) }
+          sprites.set(key, canvas)
+        }
+        const canvas = sprites.get(key)
+        if (canvas) {
+          ctx.save(); ctx.translate(x, y); ctx.rotate(options.angle || 0)
+          try { ctx.drawImage(canvas, -44, -60) } finally { ctx.restore() }
+          return
+        }
+      } catch (error) { sprites.set(key, null) }
+    }
+    drawCarVector(ctx, model, x, y, options)
+  }
+  function drawCarVector(ctx, model, x, y, options = {}) {
     const car = CARS[model]; const [w, h] = sizes[model]
     ctx.save(); ctx.translate(x, y); ctx.rotate(options.angle || 0)
     const color = car.color
@@ -279,20 +309,22 @@
     }
     for (let d = Math.floor(near / 12) * 12; d < far; d += 12) {
       const change = route.nextChange(d)
-      if (change.to < change.from && change.remaining > 0 && change.remaining < 125) {
+      if (!change.exit && change.to < change.from && change.remaining > 0 && change.remaining < 125) {
         const x = origin + route.laneX(d, change.from - 1); const y = screenY(d)
         text(ctx, '↖', x, y, '#efdb91', 32)
       }
-      if (change.to < change.from && d >= change.start && d <= change.end) {
+      if (!change.exit && change.to < change.from && d >= change.start && d <= change.end) {
         const r = route.sample(d); const x = origin + r.right + 14; const y = screenY(d)
         rect(ctx, x - 6, y - 5, 12, 10, '#eee3bc', 1)
         rect(ctx, x - 6, y - 3, 12, 3, '#c17745', 1)
       }
+      const exit = route.exitAt(d)
+      if (exit.remaining >= 0 && exit.remaining <= 145) text(ctx, '↗', origin + route.laneX(d, 2), screenY(d), '#efdb91', 32)
     }
     // Real, distance-anchored roadside signs for narrowing and exits.
     const change = route.nextChange(state.distance)
     const signDistance = change.start - 80
-    if (change.to < change.from && signDistance > near && signDistance < far) {
+    if (!change.exit && change.to < change.from && signDistance > near && signDistance < far) {
       const x = origin + route.sample(signDistance).right + 22; const y = screenY(signDistance)
       rect(ctx, x + 7, y, 3, 61, '#8c9679')
       rect(ctx, x - 4, y - 42, 77, 42, '#edce82', 4)
@@ -304,8 +336,8 @@
     if (signAt > near && signAt < far) {
       const x = origin + route.sample(signAt).right + 24; const y = screenY(signAt)
       rect(ctx, x + 6, y, 3, 57, '#849273'); rect(ctx, x - 4, y - 45, 86, 44, '#426d52', 4)
-      text(ctx, '慢行小镇 ↗', x + 39, y - 27, '#f1edcf', 10)
-      text(ctx, '驶出结算 · EXIT', x + 39, y - 12, '#d6dfbb', 9)
+      text(ctx, '最右道驶出 ↗', x + 39, y - 27, '#f1edcf', 10)
+      text(ctx, '左侧两道直行', x + 39, y - 12, '#d6dfbb', 9)
     }
     // Capture equipment and its road marking are anchored to the same world distance as the rules.
     for (let d = route.cameraAt(near).distance; d <= far; d += route.CAMERA_INTERVAL) {
@@ -335,9 +367,39 @@
     ctx.translate(area.x, area.y); ctx.scale(scale, scale); ctx.textBaseline = 'alphabetic'
     const playerY = height * .72
     const current = route.sample(state.distance)
-    const mainX = route.laneX(state.distance, state.lane)
+    const playerPose = vehiclePose(state, state, input)
+    const mainX = playerPose.x
     const origin = width / 2 - current.center - (state.phase === 'entering' || state.phase === 'exiting' || state.phase === 'arrived' ? (mainX - (current.right - LANE / 2)) * .65 : 0)
-    roadScene(ctx, width, height, state, playerY, origin)
+    // Cache a world-anchored overscan. Motion only translates this opaque image;
+    // camera movement and new road geometry rebuild it before the edges enter view.
+    let cached = false
+    if (typeof ctx.drawImage === 'function') {
+      const px = 160; const py = 240
+      const density = Math.min(1.25, Math.max(.5, scale * ((ctx.canvas && ctx.canvas.width / area.w) || 2)))
+      try {
+        if (!roadCache || roadCache.width !== width || roadCache.height !== height || roadCache.density !== density) {
+          if (roadCache && roadCache.canvas) { roadCache.canvas.width = 1; roadCache.canvas.height = 1 }
+          const canvas = surface(Math.ceil((width + px * 2) * density), Math.ceil((height + py * 2) * density))
+          roadCache = { canvas, width, height, density, distance: NaN, origin: NaN }
+        }
+        const cache = roadCache
+        if (cache.canvas) {
+          if (!Number.isFinite(cache.distance) || Math.abs(state.distance - cache.distance) * METERS > py - 48 || Math.abs(origin - cache.origin) > px - 48) {
+            const c = cache.canvas.getContext('2d')
+            c.save(); c.scale(density, density); c.textBaseline = 'alphabetic'
+            roadScene(c, width + px * 2, height + py * 2, state, playerY + py, origin + px)
+            c.restore(); cache.distance = state.distance; cache.origin = origin
+          }
+          ctx.drawImage(cache.canvas, -px + origin - cache.origin, -py + (state.distance - cache.distance) * METERS,
+            cache.canvas.width / density, cache.canvas.height / density)
+          cached = true
+        }
+      } catch (error) {
+        if (roadCache && roadCache.canvas) { roadCache.canvas.width = 1; roadCache.canvas.height = 1 }
+        roadCache = { canvas: null, width, height, density }
+      }
+    }
+    if (!cached) roadScene(ctx, width, height, state, playerY, origin)
     const x = origin + mainX
     if (state.status === 'running' && input.accelerate) {
       for (const side of [-1, 1]) rect(ctx, x + side * 18 - 2, playerY + 43, 4, 22 + Math.sin(state.elapsed * 40) * 7, '#efcf7e7a', 2)
@@ -345,15 +407,10 @@
     const cars = state.traffic.filter(car => car.z < playerY / METERS + 9 && car.z > -(height - playerY) / METERS - 9)
     cars.sort((a, b) => b.z - a.z)
     for (const car of cars) {
-      const d = state.distance + car.z
-      const angle = Math.atan(route.sample(d).slope / METERS) + ((car.targetLane == null ? car.lane : car.targetLane) - car.lane) * .2
-      drawCar(ctx, car.model, origin + route.laneX(d, car.lane), playerY - car.z * METERS, { angle, braking: car.speed < car.desired - 1 })
+      const pose = vehiclePose(state, car)
+      drawCar(ctx, car.model, origin + pose.x, playerY + pose.y, { angle: pose.angle, braking: car.speed < car.desired - 1 })
     }
-    let slope = current.slope
-    if (state.phase === 'entering') slope = route.entryX(state.distance + .5) - route.entryX(state.distance - .5)
-    if (state.phase === 'exiting' || state.phase === 'arrived') slope = route.exitX(state.distance + .5, state.chosenExit) - route.exitX(state.distance - .5, state.chosenExit)
-    const steering = state.phase !== 'driving' ? 0 : state.mode === 'cruise' ? (state.targetLane - state.lane) * .2 : ((input.right ? 1 : 0) - (input.left ? 1 : 0)) * .08
-    const angle = Math.atan(slope / METERS) + steering + (state.status === 'crashed' ? -.11 : 0)
+    const angle = playerPose.angle + (state.status === 'crashed' ? -.11 : 0)
     drawCar(ctx, state.model, x, playerY, { angle, player: true, braking: !!input.brake || state.phase === 'exiting' })
     if (state.status === 'crashed') {
       const y = playerY - 36
@@ -365,5 +422,5 @@
     if (state.cameraFlash > 0) rect(ctx, 0, 0, width, height, `rgba(255,245,218,${state.cameraFlash * .5})`)
     ctx.restore()
   }
-  return { drawScene, drawCar }
+  return { drawScene, drawCar, releaseCaches }
 })

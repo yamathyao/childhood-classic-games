@@ -1,5 +1,5 @@
 const { box, text, background } = require('../../common/canvas.js')
-const { drawScene, drawCar } = require('./art.js')
+const { drawScene, drawCar, releaseCaches } = require('./art.js')
 const rules = require('./rules.js')
 const route = require('./route.js')
 const scenery = require('./scenery.js')
@@ -13,9 +13,9 @@ function draw({ context: c, view: v, page, settings, state: s, input = {}, help,
   else {
     // The opaque road scene covers this middle region on every frame.
     c.clearRect(0, 0, v.width, v.height)
-    background(c, v.width, v.height, { x: 0, y: 0, w: v.width, h: v.scene.y })
+    c.fillStyle = '#efe6d4'; c.fillRect(0, 0, v.width, v.scene.y)
     const below = v.scene.y + v.scene.h
-    background(c, v.width, v.height, { x: 0, y: below, w: v.width, h: v.height - below })
+    c.fillRect(0, below, v.width, v.height - below)
   }
   text(c, page === 'setup' ? '‹  游戏合集' : '‹  选择座驾', 20, v.top + 18, 12, ink)
   text(c, '玩法', v.help.x + v.help.w / 2, v.top + 18, 12, ink, 'center')
@@ -67,7 +67,7 @@ function draw({ context: c, view: v, page, settings, state: s, input = {}, help,
       text(c, `抓拍 ${Math.ceil(camera.remaining)}m · 限速 80`, r.x + r.w / 2, r.y + 18, 10, '#674d29', 'center')
     }
     const exit = route.exitAt(s.distance)
-    if (s.phase === 'driving' && exit.remaining <= 220 && s.distance <= exit.decisionEnd) label(c, s.exitRequested ? '已选出口 · 靠右 →' : '驶出结算 ↗', v.exit, true, 11)
+    if (s.phase === 'driving' && exit.remaining <= 220 && s.distance <= exit.decisionEnd) label(c, s.exitRequested ? '取消辅助靠右' : '辅助靠右驶出 ↗', v.exit, true, 11)
     const values = [`${Math.round(s.speed * 3.6)}`, `${(s.distance / 1000).toFixed(2)}`, `${s.score}`]
     const captions = ['km/h', 'km', '积分']
     box(c, v.dashboard, '#f9f6e9', 10, '#d9d7c2')
@@ -89,7 +89,7 @@ function draw({ context: c, view: v, page, settings, state: s, input = {}, help,
     const x = v.modal.x + 22; const y = v.modal.y
     text(c, help ? '兜风指南' : ended ? (s.status === 'finished' ? '这一程，到站了。' : '歇一歇，再出发。') : '稍作停靠', x, y + 35, 23, ink, 'left', true)
     if (help) {
-      const lines = ['巡航：轻点左右换道，自动跟车。', '手动：按住方向，可同时按加速。', '刹车减速；弯道与收窄提前提示。', '每 100m +10，漂亮穿梭 +20。', '抓拍限速 80km/h，超 10% 扣100，', '超 20% 扣200，仅扣最高档。', '每 1.6km 可选右出口，驶出结算。', '手动需靠最右道；事故积分清零。']
+      const lines = ['巡航：轻点左右换道，自动跟车。', '手动：按住方向，可同时按加速。', '车距留一至二车长，车流会超车。', '每 100m +10，漂亮穿梭 +20。', '抓拍限速 80km/h，超 10% 扣100，', '超 20% 扣200，仅扣最高档。', '出口三车道，最右道直接驶出。', '继续请走左侧两道；事故积分清零。']
       lines.forEach((line, i) => text(c, line, x, y + 72 + i * 23, Math.min(12, (v.modal.w - 44) / 23), i > 3 && i < 6 ? '#965b3b' : ink))
       label(c, '知道了', v.close, true)
     } else if (ended) {
@@ -114,4 +114,4 @@ function drawCover(c, area) {
     { lane: 3, z: 22, model: 5, speed: 22, desired: 22 }]
   drawScene(c, area, s)
 }
-module.exports = { draw, drawCover }
+module.exports = { draw, drawCover, releaseCaches }

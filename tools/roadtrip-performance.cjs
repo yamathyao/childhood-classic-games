@@ -39,7 +39,7 @@ async function main() {
         const stats = values => {
           const sorted = values.slice().sort((a, b) => a - b)
           return { medianMs: +sorted[Math.floor(sorted.length * .5)].toFixed(3), p95Ms: +sorted[Math.floor(sorted.length * .95)].toFixed(3),
-            maxMs: +sorted[sorted.length - 1].toFixed(3) }
+            meanMs: +(values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(3), maxMs: +sorted[sorted.length - 1].toFixed(3) }
         }
         const frame = () => new Promise(resolve => requestAnimationFrame(resolve))
         const scenes = []
@@ -85,33 +85,54 @@ async function main() {
         const ctx = document.querySelector('canvas').getContext('2d'); const game = qa.load('games/roadtrip/game.js')
         const renderer = qa.load('games/roadtrip/renderer.js'); const original = renderer.draw
         const nativeRequest = window.requestAnimationFrame; const nativeCancel = window.cancelAnimationFrame
+        const nativeTimeout = window.setTimeout; const nativeClear = window.clearTimeout
         const nativeSet = wx.setStorageSync; const pending = new Set()
         const baseline = qa.events.TouchStart.size
-        let draws = 0; let writes = 0; let latest
-        renderer.draw = args => { latest = args; draws++; original(args) }
+        let draws = 0; let writes = 0; let wakeups = 0; let latest
+        const drivingCosts = []
+        renderer.draw = args => {
+          latest = args; draws++; const start = performance.now(); original(args)
+          if (args.page === 'drive' && args.state.status === 'running') drivingCosts.push(performance.now() - start)
+        }
         window.requestAnimationFrame = callback => {
-          const id = nativeRequest(timestamp => { pending.delete(id); callback(timestamp) }); pending.add(id); return id
+          const id = nativeRequest(timestamp => { pending.delete(id); wakeups++; callback(timestamp) }); pending.add(id); return id
         }
         window.cancelAnimationFrame = id => { pending.delete(id); nativeCancel(id) }
+        const timers = new Set()
+        window.setTimeout = (callback, delay) => {
+          const id = nativeTimeout(() => { timers.delete(id); wakeups++; callback() }, delay); timers.add(id); return id
+        }
+        window.clearTimeout = id => { timers.delete(id); nativeClear(id) }
         wx.setStorageSync = (...args) => { writes++; nativeSet(...args) }
-        const scene = game.start({ context: ctx, screen: { width: innerWidth, height: innerHeight, top: 24, bottom: 16 }, goHome() {} })
-        const sleep = () => new Promise(resolve => setTimeout(resolve, 180))
+        const canvas = document.querySelector('canvas'); const originalPixels = canvas.width * canvas.height
+        const scene = game.start({ canvas, context: ctx, screen: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio, top: 24, bottom: 16 }, goHome() {} })
+        const activePixels = canvas.width * canvas.height
+        const sleep = (duration = 180) => new Promise(resolve => nativeTimeout(resolve, duration))
         const tap = r => {
           const t = { identifier: 99, clientX: r.x + r.w / 2, clientY: r.y + r.h / 2 }
           // Only target the new scene's listeners, leaving the collection idle.
           for (const name of ['TouchStart', 'TouchEnd']) [...qa.events[name]].slice(-1)[0]({ changedTouches: [t], touches: name === 'TouchStart' ? [t] : [] })
         }
-        const idle = async () => { const d = draws; const w = writes; await sleep(); return { draws: draws - d, writes: writes - w, pendingFrames: pending.size } }
+        const idle = async (duration) => { const d = draws; const w = writes; const k = wakeups; await sleep(duration); return { draws: draws - d, writes: writes - w, wakeups: wakeups - k, pendingFrames: pending.size + timers.size } }
         const setup = await idle(); tap(latest.view.start)
-        const running = await idle(); tap(latest.view.pause); const paused = await idle()
+        const running = await idle(1200)
+        const drivingRender = { frames: drivingCosts.length, totalMs: +drivingCosts.reduce((sum, cost) => sum + cost, 0).toFixed(2),
+          meanMs: +(drivingCosts.reduce((sum, cost) => sum + cost, 0) / drivingCosts.length).toFixed(3), maxMs: +Math.max(...drivingCosts).toFixed(2) }
+        tap(latest.view.pause); const paused = await idle()
         tap(latest.view.resume); scene.hide(); const hidden = await idle()
         scene.show(); const shownPaused = await idle(); scene.dispose(); const disposed = await idle()
         const listenersReleased = qa.events.TouchStart.size === baseline
-        renderer.draw = original; window.requestAnimationFrame = nativeRequest; window.cancelAnimationFrame = nativeCancel; wx.setStorageSync = nativeSet
-        return { setup, running, paused, hidden, shownPaused, disposed, listenersReleased }
+        renderer.draw = original; window.requestAnimationFrame = nativeRequest; window.cancelAnimationFrame = nativeCancel; window.setTimeout = nativeTimeout; window.clearTimeout = nativeClear; wx.setStorageSync = nativeSet
+        return { setup, running, paused, hidden, shownPaused, disposed, listenersReleased,
+          drivingRender, canvas: { originalPixels, activePixels, restoredPixels: canvas.width * canvas.height } }
       })
-      for (const key of ['setup', 'paused', 'hidden', 'shownPaused', 'disposed']) assert.deepEqual(lifecycle[key], { draws: 0, writes: 0, pendingFrames: 0 }, key)
+      for (const key of ['setup', 'paused', 'hidden', 'shownPaused', 'disposed']) assert.deepEqual(lifecycle[key], { draws: 0, writes: 0, wakeups: 0, pendingFrames: 0 }, key)
       assert.equal(lifecycle.running.pendingFrames, 1); assert.equal(lifecycle.running.writes, 0); assert.ok(lifecycle.running.draws > 0)
+      if (process.argv.includes('--verify-energy')) {
+        assert.ok(lifecycle.running.wakeups <= 40, 'At most one application callback per painted frame')
+        assert.ok(lifecycle.canvas.activePixels < width * height * 2.26, 'Backing canvas density is capped')
+        assert.equal(lifecycle.canvas.restoredPixels, lifecycle.canvas.originalPixels, 'Leaving restores the collection resolution')
+      }
       assert.ok(lifecycle.listenersReleased); assert.deepEqual(errors, [])
       await session.send('HeapProfiler.collectGarbage')
       const heapAfter = (await session.send('Runtime.getHeapUsage')).usedSize
@@ -121,7 +142,8 @@ async function main() {
       await page.close()
     }
   } finally { await browser.close() }
-  const name = process.argv.includes('--save-before') ? 'before' : 'after'
+  const label = process.argv.find(value => value.startsWith('--label='))
+  const name = label ? label.slice(8) : process.argv.includes('--save-before') ? 'before' : 'after'
   const suffix = process.env.ROADTRIP_CPU_RATE ? '-cpu' + process.env.ROADTRIP_CPU_RATE + '-dpr' + dpr : ''
   fs.writeFileSync(path.join(output, name + suffix + '.json'), JSON.stringify(report, null, 2) + '\n')
 }
