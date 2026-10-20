@@ -27,7 +27,7 @@ async function main() {
     const sizes = [[320, 568, 24], [320, 568, 64], [375, 667, 24], [390, 844, 88]]
       .filter(([w, , top]) => !process.env.ROADTRIP_NATIVE_VIEWPORT || process.env.ROADTRIP_NATIVE_VIEWPORT === w + '-' + top)
     for (const [width, height, top] of sizes) {
-      const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1, reducedMotion: 'reduce' })
+      const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: +(process.env.ROADTRIP_NATIVE_DPR || 1), reducedMotion: 'reduce' })
       const errors = []; page.on('pageerror', error => errors.push(error.message)); const suffix = width + '-' + top
       await page.addInitScript(() => { localStorage.clear(); localStorage.setItem('collection.order.v1', JSON.stringify(['roadtrip'])) })
       await page.goto(pathToFileURL(preview).href); await page.waitForFunction(() => window.qa)
@@ -73,6 +73,31 @@ async function main() {
       await page.waitForTimeout(150); await page.evaluate(() => qa.emit('Show', {}))
       assert.equal(await page.evaluate(() => JSON.stringify(qa.roadtrip.state)), frozen)
       assert.equal(await page.evaluate(() => qa.roadtrip.input.accelerate), false); await screenshot('paused'); await tap('resume')
+      // Observe real timed traffic decisions, including a blocked passing lane.
+      for (const blocked of [false, true]) {
+        await page.evaluate(blocked => {
+          const s = qa.roadtrip.state
+          Object.assign(s, { phase: 'driving', distance: 450, lane: 2, targetLane: 2, speed: 20, noticeTime: 0,
+            traffic: [{ id: 201, model: 1, lane: 1, targetLane: 1, z: 4, speed: 26, desired: 28, laneCooldown: 0 },
+              { id: 202, model: 5, lane: 1, targetLane: 1, z: 36, speed: 15, desired: 15 }] })
+          if (blocked) s.traffic.push({ id: 203, model: 0, lane: 0, targetLane: 0, z: 6, speed: 26, desired: 26 })
+        }, blocked)
+        await page.waitForFunction(blocked => {
+          const car = qa.roadtrip.state.traffic.find(car => car.id === 201)
+          return blocked ? car.targetLane === 1 && car.speed < 25.5 : car.targetLane === 0 && car.lane < .6
+        }, blocked)
+        assert.equal(await page.evaluate(() => qa.roadtrip.state.status), 'running')
+        await screenshot(blocked ? 'traffic-braking' : 'traffic-overtaking')
+      }
+      await page.evaluate(() => Object.assign(qa.roadtrip.state, { mode: 'cruise', phase: 'driving', distance: 120,
+        lane: 1, targetLane: 1, speed: 20, noticeTime: 0,
+        traffic: [{ id: 301, model: 0, lane: 2, targetLane: 2, z: 9.2, speed: 20, desired: 20 }] }))
+      await tap('right')
+      assert.equal(await page.evaluate(() => qa.roadtrip.state.targetLane), 2, 'A near-bumper gap allows a player lane change')
+      await page.waitForFunction(() => qa.roadtrip.state.lane > 1.5)
+      assert.equal(await page.evaluate(() => qa.roadtrip.state.status), 'running')
+      await screenshot('tight-pass')
+      await page.evaluate(() => { qa.roadtrip.state.mode = 'manual' })
       const themes = await page.evaluate(() => qa.load('games/roadtrip/scenery.js').THEMES.map(t => t.id))
       for (let i = 0; i < themes.length; i++) {
         await page.evaluate(i => Object.assign(qa.roadtrip.state, { phase: 'driving', distance: i * 320 + 144, lane: 1, targetLane: 1,
@@ -89,9 +114,11 @@ async function main() {
         distancePoints: 0, skillPoints: 0, penaltyPoints: 0, distanceBank: 0, lastCamera: -1, scoreEvent: null, scoreEventTime: 0 }))
       await page.waitForFunction(() => qa.roadtrip.state.speedingTickets === 1)
       assert.equal(await page.evaluate(() => qa.roadtrip.state.penaltyPoints), 200); await screenshot('camera-penalty')
-      // Set up a genuine right-lane approach; the button and simulation take the actual exit.
-      await page.evaluate(() => Object.assign(qa.roadtrip.state, { distance: 1599, speed: 20, lane: 3, targetLane: 3, traffic: [], scoreEventTime: 0 }))
-      await page.waitForTimeout(40); await tap('exit'); await page.waitForFunction(() => qa.roadtrip.state.phase === 'exiting')
+      // The third lane is a physical exit; drive through without tapping the assist button.
+      await page.evaluate(() => Object.assign(qa.roadtrip.state, { distance: 1575, speed: 20, lane: 2, targetLane: 2, traffic: [], scoreEventTime: 0, exitRequested: false }))
+      await page.waitForTimeout(40); await screenshot('exit-approach')
+      assert.equal(await page.evaluate(() => qa.load('games/roadtrip/route.js').sample(qa.roadtrip.state.distance).lanes), 3)
+      await page.waitForFunction(() => qa.roadtrip.state.phase === 'exiting')
       await screenshot('exit')
       await page.evaluate(() => { const s = qa.roadtrip.state; s.distance = s.chosenExit.end - .01 })
       await page.waitForFunction(() => qa.roadtrip.state.status === 'finished'); await screenshot('result')

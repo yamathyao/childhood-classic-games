@@ -5,11 +5,25 @@ const store = require('./storage.js')
 const { layout } = require('./layout.js')
 const { contains } = require('../../common/canvas.js')
 
-function start({ context, screen, goHome }) {
+function start({ canvas, context, screen, goHome }) {
   const read = key => { try { return wx.getStorageSync(key) } catch (error) { return null } }
   let settings = store.settings(read(store.SETTINGS_KEY)); let records = store.records(read(store.RECORDS_KEY))
   let page = 'setup'; let state = null; let view = layout(screen)
   let active = true; let visible = true; let help = false; let frame = null; let last = 0
+  const FRAME_MS = 1000 / 30
+  let nextPaint = 0
+  let nativeFrameRate = false
+  if (typeof wx.setPreferredFramesPerSecond === 'function') {
+    try { wx.setPreferredFramesPerSecond(30); nativeFrameRate = true } catch (error) { /* Use a paced timer on older runtimes. */ }
+  }
+  let sourceScreen = screen
+  function sizeCanvas(next, restore = false) {
+    if (!canvas || !next.dpr || typeof context.scale !== 'function') return
+    const dpr = restore ? next.dpr : Math.min(1.5, next.dpr)
+    canvas.width = Math.round(next.width * dpr); canvas.height = Math.round(next.height * dpr)
+    context.scale(dpr, dpr)
+  }
+  sizeCanvas(screen)
   let settingsDirty = false; let recordsDirty = false; let settled = false; let warning = ''
   const fingers = new Map(); const input = { left: false, right: false, brake: false, accelerate: false }
   function persist() {
@@ -27,25 +41,34 @@ function start({ context, screen, goHome }) {
     if (frame === null) repaint()
   }
   function clearInput() { fingers.clear(); Object.keys(input).forEach(key => { input[key] = false }) }
-  function stop() { if (frame !== null) cancelAnimationFrame(frame); frame = null; last = 0 }
+  function stop() {
+    if (frame !== null) { if (nativeFrameRate) cancelAnimationFrame(frame); else clearTimeout(frame) }
+    frame = null; last = 0; nextPaint = 0
+  }
   function pause() { stop(); clearInput(); if (state && state.status === 'running') state.status = 'paused' }
   function settle() {
     if (!state || settled || !['crashed', 'finished'].includes(state.status)) return
     settled = true; records = store.finish(records, state); recordsDirty = true; persist()
   }
   function schedule() {
-    if (frame === null && active && visible && !help && state && state.status === 'running') frame = requestAnimationFrame(update)
+    if (frame === null && active && visible && !help && state && state.status === 'running') {
+      frame = nativeFrameRate ? requestAnimationFrame(update) : setTimeout(update, Math.max(1, Math.ceil(nextPaint - Date.now())))
+    }
   }
   function update() {
     frame = null
     if (!active || !visible || help || !state || state.status !== 'running') return
-    const now = Date.now(); const dt = last ? Math.min(.1, Math.max(0, (now - last) / 1000)) : 0; last = now
+    const now = Date.now()
+    if (last && now < nextPaint - .5) { schedule(); return }
+    const dt = last ? Math.min(.1, Math.max(0, (now - last) / 1000)) : 0
+    last = now; nextPaint = nextPaint && now - nextPaint < FRAME_MS ? nextPaint + FRAME_MS : now + FRAME_MS
     rules.step(state, input, dt)
     if (state.status !== 'running') { stop(); clearInput(); settle() }
     repaint(); schedule()
   }
   function begin() {
     stop(); clearInput(); settled = false; state = rules.create(settings); rules.start(state); page = 'drive'
+    last = Date.now(); nextPaint = last
     settingsDirty = true; persist(); repaint(); schedule()
   }
   function select() { pause(); settle(); persist(); page = 'setup'; state = null; help = false; repaint() }
@@ -83,7 +106,7 @@ function start({ context, screen, goHome }) {
     else if (key === 'pause') pause()
     else if (key === 'choose') { select(); return }
     else if (key === 'resume') {
-      if (state.status === 'paused') { clearInput(); rules.start(state); last = 0; schedule() }
+      if (state.status === 'paused') { clearInput(); rules.start(state); last = Date.now(); nextPaint = last; schedule() }
       else { begin(); return }
     } else if (key === 'exit') rules.requestExit(state)
     else if (key.startsWith('model-')) { settings.model = Number(key.slice(6)); settingsDirty = true }
@@ -134,12 +157,15 @@ function start({ context, screen, goHome }) {
   Object.keys(handlers).forEach(name => wx['onTouch' + name](handlers[name]))
   repaint()
   return {
-    resize(next) { pause(); view = layout(next); persist(); repaint() },
+    resize(next) { pause(); renderer.releaseCaches(); sourceScreen = next; sizeCanvas(next); view = layout(next); persist(); repaint() },
     hide() { visible = false; pause(); settle(); persist() },
     show() { visible = true; persist(); repaint() },
     dispose() {
       if (!active) return
       pause(); settle(); persist(); active = false
+      renderer.releaseCaches()
+      sizeCanvas(sourceScreen, true)
+      if (nativeFrameRate) { try { wx.setPreferredFramesPerSecond(60) } catch (error) { /* Scene is already stopped. */ } }
       Object.keys(handlers).forEach(name => wx['offTouch' + name](handlers[name]))
     }
   }

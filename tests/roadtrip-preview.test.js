@@ -43,30 +43,89 @@ test('lane changes respect boundaries and reject occupied adjacent lanes', () =>
   assert.equal(rules.changeLane(state, -1), false)
 })
 
-test('overtaking accepts shorter front and rear gaps in either adjacent lane', () => {
+test('lane changes allow a tight body clearance ahead and behind in either adjacent lane', () => {
   for (const direction of [-1, 1]) {
-    for (const z of [-8, 8]) {
+    for (const z of [-8.5, 8.5, -10, 10, -16, 16]) {
       const state = mainRoad({ seed: 25 }); rules.start(state); state.speed = 20
+      state.distance = 120
       state.traffic = [{ id: 99, lane: 1 + direction, z, speed: 20, desired: 20 }]
       assert.equal(rules.changeLane(state, direction), true, `Allow a ${z} m gap when moving ${direction}`)
       drive(state, 1)
       assert.equal(state.status, 'running', 'Tighter maneuver should still clear the other car')
       assert.ok(Math.abs(state.lane - (1 + direction)) < .01)
     }
-    for (const z of [-6, 0, 6]) {
+    for (const z of [-8, -6, 0, 6, 8]) {
       const state = mainRoad({ seed: 25 }); rules.start(state)
+      state.distance = 120
       state.traffic = [{ id: 99, lane: 1 + direction, z, speed: 20, desired: 20 }]
       assert.equal(rules.changeLane(state, direction), false, 'Overlapping or nearly alongside cars still block the maneuver')
     }
   }
 })
 
-test('cruise follows at the shorter gap without braking unnecessarily', () => {
+test('cruise opens a one-to-two-car-length bumper gap, then holds speed at the requested headway', () => {
   const state = mainRoad({ seed: 26 }); rules.start(state); state.speed = 20
-  state.traffic = [{ id: 99, lane: 1, z: 16, speed: 20, desired: 20 }]
+  state.traffic = [{ id: 99, model: 0, lane: 1, z: 16, speed: 20, desired: 20 }]
   drive(state, .1)
-  assert.ok(state.speed >= 20, 'Cruise can hold its speed with a 16 m gap to an equally fast leader')
+  assert.ok(state.speed < 20, 'A short bumper gap now asks cruise to slow down')
   assert.equal(state.status, 'running')
+  state.speed = 20; state.traffic[0].z = rules.followingGap(state, state.traffic[0]) + 1
+  drive(state, .1); assert.ok(state.speed >= 20)
+})
+
+test('player lane changes do not add stopping distance to an already clear body gap', () => {
+  for (const direction of [-1, 1]) for (const z of [-10, 10]) {
+    const s = mainRoad({ seed: 25 }); rules.start(s)
+    Object.assign(s, { distance: 120, speed: z < 0 ? 10 : 40,
+      traffic: [{ id: 90, model: 0, lane: 1 + direction, targetLane: 1 + direction, z, speed: z < 0 ? 40 : 10, desired: 20 }] })
+    assert.equal(rules.changeLane(s, direction), true)
+  }
+})
+
+test('collision boundaries follow every model body size, with edge contact and decoration excluded', () => {
+  for (let model = 0; model < rules.CARS.length; model++) for (let other = 0; other < rules.CARS.length; other++) {
+    const s = mainRoad({ model }); Object.assign(s, { distance: 120, lane: 1, targetLane: 1 })
+    const car = { model: other, lane: 1, targetLane: 1, z: 0 }
+    const a = rules.CAR_SIZES[model]; const b = rules.CAR_SIZES[other]
+    const front = (a[1] + b[1] - 4) / 16
+    for (const sign of [-1, 1]) {
+      car.z = sign * (front + .02)
+      assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), false)
+      car.z = sign * front
+      assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), false, 'Touching bumpers remain playable')
+      car.z = sign * (front - .02)
+      assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), true)
+      const side = (a[0] + b[0] - 4) / 2
+      car.z = 0; car.lane = 1 + sign * (side + .2) / route.LANE; car.targetLane = car.lane
+      assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), false)
+      car.lane = 1 + sign * (side - .2) / route.LANE; car.targetLane = car.lane
+      assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), true)
+      car.lane = 1; car.targetLane = 1
+    }
+  }
+})
+
+test('turning bodies use rotated edges instead of fixed lane fractions or oversized axis-aligned boxes', () => {
+  const s = mainRoad(); Object.assign(s, { distance: 120, lane: 1, targetLane: 2 })
+  const car = { model: 0, lane: 1.5, targetLane: 1.5, z: 0 }
+  assert.equal(rules.bodiesOverlap(rules.vehiclePose(s), rules.vehiclePose(s, car)), true, 'Turning corner crosses the old .47-lane boundary')
+  const a = rules.vehiclePose(s); a.angle = Math.PI / 4; a.cos = Math.cos(a.angle); a.sin = Math.sin(a.angle)
+  const b = { ...a, x: a.x + a.cos * 40.2, y: a.y + a.sin * 40.2 }
+  assert.equal(rules.bodiesOverlap(a, b), false, 'Parallel rotated bodies can pass without their bounding boxes causing an accident')
+  b.x = a.x + a.cos * 39.8; b.y = a.y + a.sin * 39.8
+  assert.equal(rules.bodiesOverlap(a, b), true)
+})
+
+test('live collision checks accept a side graze and reject a slight body overlap', () => {
+  for (const overlap of [false, true]) {
+    const s = mainRoad({ seed: 25, mode: 'manual' }); rules.start(s)
+    const side = (rules.CAR_SIZES[0][0] + rules.CAR_SIZES[5][0]) / 2 - 2
+    const lane = 1 + (side + (overlap ? -1 : 1)) / route.LANE
+    Object.assign(s, { distance: 120, speed: 20,
+      traffic: [{ id: 90, model: 5, lane, targetLane: lane, z: 0, speed: 20, desired: 20 }] })
+    rules.step(s, {}, 1 / 120)
+    assert.equal(s.status, overlap ? 'crashed' : 'running')
+  }
 })
 
 test('manual steering is continuous, clamped, and stops after release', () => {
@@ -137,6 +196,65 @@ test('traffic follows the nearest car ahead rather than a distant one', () => {
   assert.ok(state.traffic.find(car => car.id === 3).speed < 23, 'Close follower should brake for the nearest car')
 })
 
+test('spawn spacing and each driver headway use the actual model length and a one-to-two-car-length bumper gap', () => {
+  for (let seed = 1; seed <= 12; seed++) {
+    const state = rules.create({ seed, density: 'busy' })
+    for (const car of state.traffic) {
+      assert.ok(car.gap >= 1 && car.gap <= 2)
+      for (const other of state.traffic) if (car !== other && car.lane === other.lane) {
+        assert.ok(Math.abs(car.z - other.z) >= Math.max(rules.followingGap(car, other), rules.followingGap(other, car)) - 1e-8)
+      }
+      const body = (rules.CAR_LENGTHS[car.model] + rules.CAR_LENGTHS[0]) / 2
+      const bumper = rules.followingGap(car, { model: 0 }) - body
+      assert.ok(bumper >= rules.CAR_LENGTHS[car.model] - 1e-8 && bumper <= rules.CAR_LENGTHS[car.model] * 2 + 1e-8)
+    }
+  }
+})
+
+test('a faster traffic car passes on the left only with a clear gap, and brakes when that gap is blocked', () => {
+  for (const blocked of [false, true]) {
+    const s = mainRoad({ seed: 42 }); rules.start(s)
+    Object.assign(s, { distance: 450, lane: 2, targetLane: 2, speed: 20 })
+    const follower = { id: 201, model: 1, lane: 1, targetLane: 1, z: -20, speed: 26, desired: 28, laneCooldown: 0 }
+    s.traffic = [follower, { id: 202, model: 5, lane: 1, targetLane: 1, z: 12, speed: 15, desired: 15 }]
+    if (blocked) s.traffic.push({ id: 203, model: 0, lane: 0, targetLane: 0, z: -18, speed: 26, desired: 26 })
+    drive(s, .3)
+    assert.equal(s.status, 'running')
+    if (blocked) { assert.equal(follower.targetLane, 1); assert.ok(follower.speed < 26) }
+    else { assert.equal(follower.targetLane, 0); assert.ok(follower.lane < .6); assert.ok(follower.laneCooldown > 4) }
+  }
+})
+
+test('traffic can pass through a tight gap without requiring a fifty-metre empty corridor', () => {
+  for (const z of [-9, 16]) {
+    const s = mainRoad({ seed: 42 }); rules.start(s)
+    Object.assign(s, { distance: 450, lane: 2, targetLane: 2, speed: 20 })
+    const follower = { id: 201, model: 1, lane: 1, targetLane: 1, z: -20, speed: 26, desired: 28, laneCooldown: 0 }
+    s.traffic = [follower, { id: 202, model: 5, lane: 1, targetLane: 1, z: 12, speed: 15, desired: 15 },
+      { id: 203, model: 0, lane: 0, targetLane: 0, z, speed: z < 0 ? 26 : 15, desired: z < 0 ? 26 : 15 }]
+    drive(s, .3)
+    assert.equal(follower.targetLane, 0)
+    assert.equal(s.status, 'running')
+  }
+})
+
+test('three-lane exit approach sends the right lane directly to the ramp in either mode and on later cycles', () => {
+  for (const mode of ['cruise', 'manual']) for (const cycle of [1, 2, 8]) {
+    const exit = route.exitAt(cycle * route.PERIOD - 10)
+    for (const lane of [0, 1, 2]) {
+      const s = mainRoad({ seed: 40, mode }); rules.start(s)
+      Object.assign(s, { distance: exit.start - 15, lane, targetLane: lane, traffic: [], speed: 20 })
+      assert.equal(route.sample(exit.start - 15).lanes, 3)
+      assert.equal(route.sample(exit.start - 15).maxLane, 2)
+      assert.equal(s.exitRequested, false)
+      drive(s, 16)
+      assert.equal(s.status, lane === 2 ? 'finished' : 'running')
+      assert.equal(s.phase, lane === 2 ? 'arrived' : 'driving')
+      if (lane === 2) assert.equal(s.chosenExit.start, exit.start)
+    }
+  }
+})
+
 
 test('entry starts on a real right-side ramp and smoothly joins the rightmost lane', () => {
   for (const mode of ['cruise', 'manual']) {
@@ -154,7 +272,7 @@ test('entry starts on a real right-side ramp and smoothly joins the rightmost la
 
 test('entry yields before the merge when main-road traffic occupies the gap', () => {
   const state = rules.create({ seed: 9 }); rules.start(state)
-  Object.assign(state, { distance: 75, lane: route.entryLane(75), speed: 10 })
+  Object.assign(state, { distance: 70, lane: route.entryLane(70), speed: 10 })
   state.traffic = [{ id: 999, lane: 3, z: 0, model: 0, speed: 9, desired: 9 }]
   rules.step(state, {}, .1)
   assert.equal(state.mergeWaiting, true)
@@ -223,7 +341,7 @@ test('manual drivers retain control and are slowed on the closing shoulder', () 
 test('exit is optional; a requested exit follows its right ramp to completion', () => {
   const exit = route.exitAt(0)
   const straight = mainRoad({ seed: 14 }); rules.start(straight)
-  Object.assign(straight, { distance: exit.start - 10, lane: 3, targetLane: 3 }); straight.traffic = []
+  Object.assign(straight, { distance: exit.start - 10, lane: 1, targetLane: 1 }); straight.traffic = []
   drive(straight, 7)
   assert.equal(straight.phase, 'driving'); assert.equal(straight.status, 'running')
   const state = mainRoad({ seed: 14 }); rules.start(state)
@@ -249,8 +367,8 @@ test('exit selection can be canceled; missing an exit continues safely without t
 
 test('manual exit needs the rightmost lane and works on later route cycles', () => {
   const state = mainRoad({ seed: 16, mode: 'manual' }); rules.start(state)
-  Object.assign(state, { distance: route.EXIT_INTERVAL * 2 - 1, lane: 3, targetLane: 3 }); state.traffic = []
-  assert.equal(rules.requestExit(state), true)
+  Object.assign(state, { distance: route.EXIT_INTERVAL * 2 - 1, lane: 2, targetLane: 2 }); state.traffic = []
+  assert.equal(state.exitRequested, false, 'Physical exit lane needs no button')
   drive(state, 16)
   assert.equal(state.status, 'finished')
   assert.equal(state.chosenExit.start, route.EXIT_INTERVAL * 2)

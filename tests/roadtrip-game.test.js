@@ -12,10 +12,12 @@ const { layout } = require('../games/roadtrip/layout.js')
 function boot(options = {}) {
   const storage = options.storage || new Map(); const listeners = {}; const frames = new Map()
   let now = 1000; let frameId = 0; let paints = 0; let homes = 0; let data; let failed = !!options.failedStorage
+  const rates = []; let callbacks = 0
   const writes = []
   const wx = { getStorageSync: key => storage.get(key), setStorageSync: (key, value) => {
     if (failed) throw new Error('Full'); storage.set(key, structuredClone(value)); writes.push(key)
   } }
+  if (options.nativeFrameRate) wx.setPreferredFramesPerSecond = rate => rates.push(rate)
   for (const name of ['Start', 'Move', 'End', 'Cancel']) {
     listeners[name] = new Set(); wx['onTouch' + name] = cb => listeners[name].add(cb); wx['offTouch' + name] = cb => listeners[name].delete(cb)
   }
@@ -25,22 +27,30 @@ function boot(options = {}) {
     c[name] = (...args) => assert.ok(args.every(v => typeof v !== 'number' || Number.isFinite(v)), name)
   }
   c.createLinearGradient = () => ({ addColorStop() {} })
+  const canvas = { width: 1125, height: 2001 }
   const nativeRenderer = require('../games/roadtrip/renderer.js')
-  const renderer = { draw(args) { data = args; paints++; if (options.realArt) nativeRenderer.draw(args) } }
+  const renderer = { releaseCaches: nativeRenderer.releaseCaches, draw(args) { data = args; paints++; if (options.realArt) nativeRenderer.draw(args) } }
   const file = path.resolve(__dirname, '../games/roadtrip/game.js'); const module = { exports: {} }
   vm.runInNewContext('(function(require,module){' + fs.readFileSync(file, 'utf8') + '\n})', {
     wx, Date: class extends Date { static now() { return now } },
-    requestAnimationFrame: cb => { frames.set(++frameId, cb); return frameId }, cancelAnimationFrame: id => frames.delete(id)
+    requestAnimationFrame: cb => { frames.set(++frameId, { cb, at: now + (options.nativeFrameRate ? 1000 / 30 : 16) }); return frameId }, cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: (cb, delay) => { frames.set(++frameId, { cb, at: now + delay }); return frameId }, clearTimeout: id => frames.delete(id)
   })(request => request === './renderer.js' ? renderer : require(path.resolve(path.dirname(file), request)), module)
-  const scene = module.exports.start({ context: c, screen: options.screen || { width: 375, height: 667, top: 24, bottom: 16 },
+  const scene = module.exports.start({ canvas, context: c, screen: options.screen || { width: 375, height: 667, top: 24, bottom: 16 },
     goHome() { homes++; scene.dispose() } })
   const touch = (r, id = 1) => ({ identifier: id, clientX: r.x + r.w / 2, clientY: r.y + r.h / 2 })
   const emit = (name, changed = [], touches = changed) => { for (const cb of [...listeners[name]]) cb({ changedTouches: changed, touches }) }
   const tap = r => { const t = touch(r); emit('Start', [t]); emit('End', [t], []) }
-  const advance = (ms = 32) => {
-    for (let t = 0; t < ms; t += 16) { now += 16; const pending = [...frames.values()]; frames.clear(); pending.forEach(cb => cb(now)) }
+  const advance = (ms = 32, interval = 16) => {
+    const end = now + ms
+    while (true) {
+      const pending = [...frames].filter(([, entry]) => entry.at <= end).sort((a, b) => a[1].at - b[1].at)[0]
+      if (!pending) break
+      const [id, entry] = pending; frames.delete(id); now = entry.at; callbacks++; entry.cb(now)
+    }
+    now = end
   }
-  return { scene, frames, storage, writes, listeners, touch, emit, tap, advance, data: () => data, homes: () => homes, paints: () => paints,
+  return { scene, frames, storage, writes, listeners, touch, emit, tap, advance, canvas, rates, callbacks: () => callbacks, data: () => data, homes: () => homes, paints: () => paints,
     failStorage(value) { failed = value }, control(key) { return data.view.controls.find(r => r.key === key) } }
 }
 
@@ -116,9 +126,31 @@ test('hide, resize, help and pause stop frames, clear held controls and never re
   g.tap(g.data().view.choose); assert.equal(g.data().page, 'setup'); g.scene.dispose()
 })
 
+test('high-refresh screens submit at most thirty driving frames per second without slowing simulation time', () => {
+  for (const interval of [8, 16]) {
+    const g = boot(); g.tap(g.data().view.start)
+    Object.assign(g.data().state, { phase: 'driving', distance: 150, lane: 1, targetLane: 1, traffic: [] })
+    const paints = g.paints(); g.advance(2000, interval)
+    assert.ok(g.callbacks() >= 59 && g.callbacks() <= 61, 'No empty callbacks between driving frames')
+    assert.ok(g.paints() - paints >= 59 && g.paints() - paints <= 61)
+    assert.ok(g.data().state.elapsed >= 1.95 && g.data().state.elapsed <= 2)
+    assert.equal(g.frames.size, 1); g.scene.dispose()
+  }
+})
+
+test('native frame preference and reduced canvas density are restored when leaving the game', () => {
+  const g = boot({ nativeFrameRate: true, screen: { width: 375, height: 667, top: 24, bottom: 16, dpr: 3 } })
+  assert.deepEqual(g.rates, [30]); assert.equal(g.canvas.width, 563); assert.equal(g.canvas.height, 1001)
+  g.tap(g.data().view.start); g.advance(2000)
+  assert.ok(g.callbacks() >= 59 && g.callbacks() <= 61)
+  g.scene.resize({ width: 390, height: 844, top: 24, bottom: 16, dpr: 2 })
+  assert.equal(g.canvas.width, 585); assert.equal(g.frames.size, 0)
+  g.scene.dispose(); assert.deepEqual(g.rates, [30, 60]); assert.equal(g.canvas.width, 780); assert.equal(g.canvas.height, 1688)
+})
+
 test('exit button leads to a terminal result, saves once, retries failed storage, and restarts a clean run', () => {
   const g = boot(); g.tap(g.data().view.start)
-  Object.assign(g.data().state, { phase: 'driving', distance: 1500, lane: 3, targetLane: 3, traffic: [], speed: 20 })
+  Object.assign(g.data().state, { phase: 'driving', distance: 1500, lane: 2, targetLane: 2, traffic: [], speed: 20 })
   g.advance(); g.tap(g.data().view.exit); assert.equal(g.data().state.exitRequested, true)
   for (let i = 0; i < 1250 && g.data().state.phase === 'driving'; i++) g.advance(16)
   assert.equal(g.data().state.phase, 'exiting')
@@ -244,4 +276,30 @@ test('water crossings have finite spans and repeat with scenery rather than road
     assert.deepEqual(scenery.bridges(end + 1, end + 50), [])
   }
   assert.equal(scenery.bridges(0, cycle * 3).length, 3)
+})
+
+test('road overscan and car sprites reuse bounded surfaces, refresh after motion, and release on resize and dispose', () => {
+  let painted = 0; let submitted = 0; const surfaces = []
+  function context(offscreen) {
+    const c = { canvas: { width: 750 } }
+    for (const name of ['beginPath', 'moveTo', 'lineTo', 'quadraticCurveTo', 'closePath', 'arc', 'fill', 'stroke', 'save', 'restore',
+      'clip', 'translate', 'scale', 'rotate', 'setLineDash', 'strokeRect', 'fillRect', 'fillText', 'drawImage']) {
+      c[name] = (...args) => { assert.ok(args.every(v => typeof v !== 'number' || Number.isFinite(v))); if (offscreen) painted++; else submitted++ }
+    }
+    return c
+  }
+  const file = path.resolve(__dirname, '../games/roadtrip/art.js'); const module = { exports: {} }
+  const wx = { createOffscreenCanvas({ width, height }) { const c = context(true); const canvas = { width, height, getContext: () => c }; surfaces.push(canvas); return canvas } }
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { wx, module, require: request => require(path.resolve(path.dirname(file), request)) })
+  const art = module.exports; const c = context(false); const s = rules.create({ seed: 32 }); const area = { x: 0, y: 0, w: 375, h: 420 }
+  Object.assign(s, { phase: 'driving', distance: 450, lane: 1 })
+  art.drawScene(c, area, s); const built = painted; const count = surfaces.length
+  assert.ok(built > 1000); submitted = 0; s.distance += 1
+  art.drawScene(c, area, s); assert.equal(painted, built); assert.equal(surfaces.length, count); assert.ok(submitted < 200)
+  s.distance += 40; art.drawScene(c, area, s); assert.ok(painted > built); assert.equal(surfaces.length, count)
+  const oldRoad = surfaces[0]; art.drawScene(c, { ...area, h: 480 }, s); assert.equal(oldRoad.width, 1)
+  art.releaseCaches(); surfaces.forEach(canvas => assert.equal(canvas.width, 1))
+  wx.createOffscreenCanvas = () => { throw new Error('Unsupported') }
+  submitted = 0; art.drawScene(c, area, s); assert.ok(submitted > 1000, 'Unsupported offscreen surfaces fall back to native vector drawing')
+  art.releaseCaches()
 })
